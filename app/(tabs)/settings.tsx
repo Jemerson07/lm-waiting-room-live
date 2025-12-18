@@ -1,22 +1,22 @@
-import { StyleSheet, View, TextInput, Switch, ScrollView } from "react-native";
+import {
+  StyleSheet,
+  View,
+  ScrollView,
+  TextInput,
+  Pressable,
+  Switch,
+  Alert,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useState, useEffect } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Image } from "expo-image";
+import * as Haptics from "expo-haptics";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
-
-const SETTINGS_KEY = "company_settings";
-
-interface CompanySettings {
-  companyName: string;
-  soundAlertsEnabled: boolean;
-}
-
-const DEFAULT_SETTINGS: CompanySettings = {
-  companyName: "LM Soluções de Mobilidade",
-  soundAlertsEnabled: true,
-};
+import { useCompanySettings } from "@/hooks/use-company-settings";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -25,50 +25,90 @@ export default function SettingsScreen() {
   const cardBackground = useThemeColor({}, "cardBackground");
   const borderColor = useThemeColor({}, "border");
 
-  const [settings, setSettings] = useState<CompanySettings>(DEFAULT_SETTINGS);
-  const [loading, setLoading] = useState(true);
+  const { settings, loading, saveSettings } = useCompanySettings();
 
-  // Carregar configurações ao montar
+  const [companyName, setCompanyName] = useState("");
+  const [companyEmail, setCompanyEmail] = useState("");
+  const [companyPhone, setCompanyPhone] = useState("");
+  const [companyAddress, setCompanyAddress] = useState("");
+  const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState("3");
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+
   useEffect(() => {
-    loadSettings();
-  }, []);
+    if (!loading && settings) {
+      setCompanyName(settings.companyName || "");
+      setCompanyEmail(settings.companyEmail || "");
+      setCompanyPhone(settings.companyPhone || "");
+      setCompanyAddress(settings.companyAddress || "");
+      setSoundAlertsEnabled(settings.soundAlertsEnabled !== false);
+      setNotificationsEnabled(settings.notificationsEnabled !== false);
+      setAutoRefreshInterval(String(settings.autoRefreshInterval || 3));
+    }
+  }, [settings, loading]);
 
-  const loadSettings = async () => {
+  const handleSaveSettings = async () => {
+    if (!companyName.trim()) {
+      Alert.alert("Erro", "Por favor, informe o nome da empresa");
+      return;
+    }
+
     try {
-      const stored = await AsyncStorage.getItem(SETTINGS_KEY);
-      if (stored) {
-        setSettings(JSON.parse(stored));
+      setSaving(true);
+      await saveSettings({
+        companyName: companyName.trim(),
+        companyEmail: companyEmail.trim(),
+        companyPhone: companyPhone.trim(),
+        companyAddress: companyAddress.trim(),
+        soundAlertsEnabled,
+        notificationsEnabled,
+        autoRefreshInterval: parseInt(autoRefreshInterval) || 3,
+      });
+
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
+      setHasChanges(false);
+      Alert.alert("Sucesso", "Configurações salvas com sucesso!");
     } catch (error) {
-      console.error("Erro ao carregar configurações:", error);
+      Alert.alert("Erro", "Não foi possível salvar as configurações");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const saveSettings = async (newSettings: CompanySettings) => {
-    try {
-      await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
-      setSettings(newSettings);
-    } catch (error) {
-      console.error("Erro ao salvar configurações:", error);
-    }
-  };
-
-  const handleCompanyNameChange = (text: string) => {
-    const newSettings = { ...settings, companyName: text };
-    saveSettings(newSettings);
-  };
-
-  const handleSoundToggle = (value: boolean) => {
-    const newSettings = { ...settings, soundAlertsEnabled: value };
-    saveSettings(newSettings);
+  const handleReset = () => {
+    Alert.alert(
+      "Restaurar Padrões",
+      "Deseja restaurar as configurações padrão?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Restaurar",
+          style: "destructive",
+          onPress: () => {
+            setCompanyName("LM Soluções de Mobilidade");
+            setCompanyEmail("");
+            setCompanyPhone("");
+            setCompanyAddress("");
+            setSoundAlertsEnabled(true);
+            setNotificationsEnabled(true);
+            setAutoRefreshInterval("3");
+            setHasChanges(true);
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
     return (
       <ThemedView style={[styles.container, { backgroundColor }]}>
-        <ThemedText>Carregando...</ThemedText>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={tintColor} />
+        </View>
       </ThemedView>
     );
   }
@@ -89,71 +129,202 @@ export default function SettingsScreen() {
         <View style={styles.header}>
           <ThemedText type="title">Configurações</ThemedText>
           <ThemedText style={styles.subtitle}>
-            Personalize as informações da empresa
+            Personalize seu sistema de atendimento
           </ThemedText>
         </View>
 
         {/* Seção: Informações da Empresa */}
-        <View style={styles.section}>
+        <View style={[styles.section, { backgroundColor: cardBackground }]}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Informações da Empresa
+            📋 Informações da Empresa
           </ThemedText>
 
-          <View style={[styles.card, { backgroundColor: cardBackground }]}>
-            <ThemedText style={styles.label}>Nome da Empresa</ThemedText>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>Nome da Empresa *</ThemedText>
             <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor,
-                  borderColor,
-                  color: useThemeColor({}, "text"),
-                },
-              ]}
-              value={settings.companyName}
-              onChangeText={handleCompanyNameChange}
-              placeholder="Digite o nome da empresa"
+              style={[styles.input, { backgroundColor, borderColor }]}
+              value={companyName}
+              onChangeText={(text) => {
+                setCompanyName(text);
+                setHasChanges(true);
+              }}
+              placeholder="Ex: LM Soluções de Mobilidade"
+              placeholderTextColor="#999"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>Email</ThemedText>
+            <TextInput
+              style={[styles.input, { backgroundColor, borderColor }]}
+              value={companyEmail}
+              onChangeText={(text) => {
+                setCompanyEmail(text);
+                setHasChanges(true);
+              }}
+              placeholder="contato@empresa.com"
+              placeholderTextColor="#999"
+              keyboardType="email-address"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>Telefone</ThemedText>
+            <TextInput
+              style={[styles.input, { backgroundColor, borderColor }]}
+              value={companyPhone}
+              onChangeText={(text) => {
+                setCompanyPhone(text);
+                setHasChanges(true);
+              }}
+              placeholder="(11) 99999-9999"
+              placeholderTextColor="#999"
+              keyboardType="phone-pad"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>Endereço</ThemedText>
+            <TextInput
+              style={[styles.input, { backgroundColor, borderColor }]}
+              value={companyAddress}
+              onChangeText={(text) => {
+                setCompanyAddress(text);
+                setHasChanges(true);
+              }}
+              placeholder="Rua, número, bairro, cidade"
               placeholderTextColor="#999"
             />
           </View>
         </View>
 
-        {/* Seção: Preferências */}
-        <View style={styles.section}>
+        {/* Seção: Notificações e Alertas */}
+        <View style={[styles.section, { backgroundColor: cardBackground }]}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Preferências
+            🔔 Notificações e Alertas
           </ThemedText>
 
-          <View style={[styles.card, { backgroundColor: cardBackground }]}>
-            <View style={styles.settingRow}>
-              <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingLabel}>Alertas Sonoros</ThemedText>
-                <ThemedText style={styles.settingDescription}>
-                  Reproduzir som ao mudar status
-                </ThemedText>
-              </View>
-              <Switch
-                value={settings.soundAlertsEnabled}
-                onValueChange={handleSoundToggle}
-                trackColor={{ false: "#767577", true: tintColor }}
-                thumbColor="#fff"
-              />
+          <View style={styles.settingRow}>
+            <View style={styles.settingLabel}>
+              <ThemedText style={styles.settingTitle}>Alertas Sonoros</ThemedText>
+              <ThemedText style={styles.settingDescription}>
+                Toque ao atualizar status
+              </ThemedText>
             </View>
+            <Switch
+              value={soundAlertsEnabled}
+              onValueChange={(value) => {
+                setSoundAlertsEnabled(value);
+                setHasChanges(true);
+              }}
+              trackColor={{ false: "#ccc", true: tintColor }}
+              thumbColor="#fff"
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingLabel}>
+              <ThemedText style={styles.settingTitle}>Notificações</ThemedText>
+              <ThemedText style={styles.settingDescription}>
+                Receber atualizações em tempo real
+              </ThemedText>
+            </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={(value) => {
+                setNotificationsEnabled(value);
+                setHasChanges(true);
+              }}
+              trackColor={{ false: "#ccc", true: tintColor }}
+              thumbColor="#fff"
+            />
+          </View>
+        </View>
+
+        {/* Seção: Sistema */}
+        <View style={[styles.section, { backgroundColor: cardBackground }]}>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            ⚙️ Sistema
+          </ThemedText>
+
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>
+              Intervalo de Atualização (segundos)
+            </ThemedText>
+            <TextInput
+              style={[styles.input, { backgroundColor, borderColor }]}
+              value={autoRefreshInterval}
+              onChangeText={(text) => {
+                setAutoRefreshInterval(text);
+                setHasChanges(true);
+              }}
+              placeholder="3"
+              placeholderTextColor="#999"
+              keyboardType="number-pad"
+            />
+            <ThemedText style={styles.helperText}>
+              Frequência de sincronização com o servidor (mínimo: 1 segundo)
+            </ThemedText>
           </View>
         </View>
 
         {/* Seção: Sobre */}
-        <View style={styles.section}>
+        <View style={[styles.section, { backgroundColor: cardBackground }]}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Sobre
+            ℹ️ Sobre
           </ThemedText>
 
-          <View style={[styles.card, { backgroundColor: cardBackground }]}>
-            <ThemedText style={styles.aboutText}>
-              Sistema de Gerenciamento de Sala de Espera
+          <View style={styles.aboutContainer}>
+            <Image
+              source={require("@/assets/images/logo-lm.png")}
+              style={styles.logoAbout}
+              contentFit="contain"
+            />
+            <ThemedText style={styles.appVersion}>
+              LM Sala de Espera Live v1.0.0
             </ThemedText>
-            <ThemedText style={styles.versionText}>Versão 1.0.0</ThemedText>
+            <ThemedText style={styles.appDescription}>
+              Sistema de gerenciamento de sala de espera veicular com sincronização
+              em tempo real
+            </ThemedText>
           </View>
+        </View>
+
+        {/* Botões de Ação */}
+        <View style={styles.actionButtons}>
+          <Pressable
+            style={[
+              styles.button,
+              styles.resetButton,
+              { borderColor: "#FF3B30" },
+            ]}
+            onPress={handleReset}
+          >
+            <ThemedText style={[styles.buttonText, { color: "#FF3B30" }]}>
+              Restaurar Padrões
+            </ThemedText>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.button,
+              styles.saveButton,
+              { backgroundColor: tintColor },
+              !hasChanges && styles.buttonDisabled,
+            ]}
+            onPress={handleSaveSettings}
+            disabled={!hasChanges || saving}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <ThemedText style={styles.buttonText}>
+                {hasChanges ? "💾 Salvar Alterações" : "✓ Salvo"}
+              </ThemedText>
+            )}
+          </Pressable>
         </View>
       </ScrollView>
     </ThemedView>
@@ -179,14 +350,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   section: {
-    marginBottom: 32,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
   },
   sectionTitle: {
-    marginBottom: 12,
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 20,
   },
-  card: {
-    borderRadius: 12,
-    padding: 16,
+  formGroup: {
+    marginBottom: 20,
   },
   label: {
     fontSize: 14,
@@ -199,30 +373,85 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
   },
+  helperText: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 6,
+  },
   settingRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  settingInfo: {
-    flex: 1,
-    marginRight: 16,
+    paddingVertical: 12,
   },
   settingLabel: {
+    flex: 1,
+  },
+  settingTitle: {
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 4,
   },
   settingDescription: {
-    fontSize: 14,
-    opacity: 0.7,
+    fontSize: 13,
+    opacity: 0.6,
   },
-  aboutText: {
-    fontSize: 14,
+  divider: {
+    height: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.1)",
+    marginVertical: 12,
+  },
+  aboutContainer: {
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  logoAbout: {
+    width: 120,
+    height: 60,
+    marginBottom: 16,
+  },
+  appVersion: {
+    fontSize: 16,
+    fontWeight: "600",
     marginBottom: 8,
   },
-  versionText: {
-    fontSize: 12,
+  appDescription: {
+    fontSize: 13,
+    opacity: 0.7,
+    textAlign: "center",
+  },
+  actionButtons: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  button: {
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    minHeight: 48,
+    justifyContent: "center",
+  },
+  resetButton: {
+    borderWidth: 2,
+    backgroundColor: "transparent",
+  },
+  saveButton: {
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  buttonDisabled: {
     opacity: 0.5,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

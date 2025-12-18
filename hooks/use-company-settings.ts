@@ -5,12 +5,22 @@ const SETTINGS_KEY = "company_settings";
 
 interface CompanySettings {
   companyName: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  companyAddress?: string;
   soundAlertsEnabled: boolean;
+  notificationsEnabled?: boolean;
+  autoRefreshInterval?: number;
 }
 
 const DEFAULT_SETTINGS: CompanySettings = {
   companyName: "LM Soluções de Mobilidade",
+  companyEmail: "",
+  companyPhone: "",
+  companyAddress: "",
   soundAlertsEnabled: true,
+  notificationsEnabled: true,
+  autoRefreshInterval: 3,
 };
 
 export function useCompanySettings() {

@@ -36,3 +36,14 @@
 - [x] Exibir flags de tipo de serviço nos cards da tela Live
 - [x] Atualizar tipos TypeScript para incluir serviceType
 - [x] Testar sistema via desktop/web
+
+
+## Melhorias para Padrão Executivo
+
+- [x] Adicionar logo LM ao projeto
+- [x] Expandir tela de Configurações com campos editáveis
+- [x] Elevar design visual para padrão corporativo/executivo
+- [x] Melhorar storytelling na tela Live com mensagens premium
+- [x] Otimizar layout para desktop (responsividade)
+- [x] Implementar correções de UX e bugs
+- [x] Realizar testes completos do sistema

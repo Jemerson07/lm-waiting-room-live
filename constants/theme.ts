@@ -5,34 +5,34 @@
 
 import { Platform } from "react-native";
 
-const tintColorLight = "#0066CC";
+const tintColorLight = "#0052A3";
 const tintColorDark = "#0066CC";
 
 export const Colors = {
   light: {
-    text: "#11181C",
-    background: "#FFFFFF",
+    text: "#1a1a2e",
+    background: "#f8f9fa",
     tint: tintColorLight,
-    icon: "#687076",
-    tabIconDefault: "#687076",
+    icon: "#0052A3",
+    tabIconDefault: "#999",
     tabIconSelected: tintColorLight,
-    cardBackground: "#F8F9FA",
-    border: "#E1E4E8",
+    cardBackground: "#ffffff",
+    border: "#e0e0e0",
     // Status colors
-    statusArrival: "#0066CC",
+    statusArrival: "#0052A3",
     statusWaiting: "#FFA500",
     statusInService: "#FF6B00",
     statusCompleted: "#00C853",
   },
   dark: {
-    text: "#ECEDEE",
-    background: "#151718",
+    text: "#f5f5f5",
+    background: "#0f0f1e",
     tint: tintColorDark,
-    icon: "#9BA1A6",
-    tabIconDefault: "#9BA1A6",
+    icon: "#64b5f6",
+    tabIconDefault: "#666",
     tabIconSelected: tintColorDark,
-    cardBackground: "#1E1E1E",
-    border: "#2D2D2D",
+    cardBackground: "#1a1a2e",
+    border: "#333",
     // Status colors (same for dark mode)
     statusArrival: "#0066CC",
     statusWaiting: "#FFA500",

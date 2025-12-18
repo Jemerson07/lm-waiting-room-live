@@ -6,6 +6,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { NivusBackground } from "@/components/nivus-background";
 import { VehicleCard } from "@/components/vehicle-card";
+import { LiveHeader } from "@/components/live-header";
 import { useAttendances } from "@/hooks/use-attendances";
 import { useCompanySettings } from "@/hooks/use-company-settings";
 import type { AttendanceStatus } from "@/types/attendance";
@@ -57,12 +58,21 @@ export default function LiveScreen() {
       {/* Background animado com imagem do VW Nivus */}
       <NivusBackground />
 
+      <LiveHeader
+        currentTime={currentTime.toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}
+        totalAttendances={attendances.length}
+        completedAttendances={groupedAttendances.completed.length}
+      />
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: Math.max(insets.top, 20) + 20,
+            paddingTop: 20,
             paddingBottom: Math.max(insets.bottom, 20) + 20,
           },
         ]}
@@ -70,26 +80,6 @@ export default function LiveScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" />
         }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <View style={styles.logoCircle}>
-              <ThemedText style={styles.logoText}>🚗</ThemedText>
-            </View>
-          </View>
-          <ThemedText type="title" style={styles.companyName}>
-            {settings.companyName}
-          </ThemedText>
-          <ThemedText style={styles.subtitle}>
-            Acompanhe seu veículo em tempo real
-          </ThemedText>
-          <ThemedText style={styles.clock}>
-            {currentTime.toLocaleTimeString("pt-BR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </ThemedText>
-        </View>
 
         {/* Seções por Status */}
         {(["arrival", "waiting", "in_service", "completed"] as AttendanceStatus[]).map(
@@ -263,7 +253,7 @@ const styles = StyleSheet.create({
   footer: {
     alignItems: "center",
     marginTop: 40,
-    paddingHorizontal: 20,
+    paddingHorizontal: 0,
     paddingBottom: 20,
   },
   footerText: {
