@@ -89,4 +89,59 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// Funções para gerenciar atendimentos
+
+export async function getAllAttendances() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get attendances: database not available");
+    return [];
+  }
+
+  const { attendances } = await import("../drizzle/schema");
+  const result = await db.select().from(attendances);
+  return result;
+}
+
+export async function createAttendance(data: {
+  licensePlate: string;
+  vehicleModel: string;
+  customerName?: string;
+  description?: string;
+}) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const { attendances } = await import("../drizzle/schema");
+  const result = await db.insert(attendances).values({
+    licensePlate: data.licensePlate,
+    vehicleModel: data.vehicleModel,
+    customerName: data.customerName,
+    description: data.description,
+    status: "arrival",
+  });
+
+  return result;
+}
+
+export async function updateAttendanceStatus(id: number, status: "arrival" | "waiting" | "in_service" | "completed") {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const { attendances } = await import("../drizzle/schema");
+  await db.update(attendances).set({ status }).where(eq(attendances.id, id));
+}
+
+export async function deleteAttendance(id: number) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const { attendances } = await import("../drizzle/schema");
+  await db.delete(attendances).where(eq(attendances.id, id));
+}

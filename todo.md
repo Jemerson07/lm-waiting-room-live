@@ -1,0 +1,28 @@
+# Project TODO
+
+## Funcionalidades Principais
+
+- [x] Configurar tema azul e branco personalizado
+- [x] Configurar navegação com 3 tabs (Admin, Live, Configurações)
+- [x] Criar schema do banco de dados para atendimentos
+- [x] Implementar hooks para gerenciar atendimentos
+- [x] Tela Admin: Formulário para adicionar atendimentos
+- [x] Tela Admin: Lista de atendimentos com filtros por status
+- [x] Tela Admin: Botões para avançar status
+- [x] Tela Admin: Botão para remover atendimentos
+- [x] Tela Live: Header com logo e relógio
+- [x] Tela Live: Seções agrupadas por status
+- [x] Tela Live: Cards de veículos estilizados
+- [x] Tela Live: Background animado com gradiente azul
+- [x] Tela Live: Atualização automática a cada 3 segundos
+- [x] Tela Configurações: Editar nome da empresa
+- [x] Tela Configurações: Toggle para alertas sonoros
+- [x] Componente: Card de atendimento para Admin
+- [x] Componente: Card de veículo para Live
+- [x] Componente: Badge de status colorido
+- [x] Componente: Background animado
+- [x] Animações: Fade in para novos cards
+- [x] Animações: Pulso para cards "Em Manutenção"
+- [x] Feedback háptico para ações
+- [x] Gerar logo personalizado do aplicativo
+- [x] Atualizar branding no app.config.ts

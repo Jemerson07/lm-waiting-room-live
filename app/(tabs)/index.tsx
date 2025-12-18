@@ -1,278 +1,627 @@
-import { Image } from "expo-image";
-import { useRouter, Link } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet } from "react-native";
-
-import { HelloWave } from "@/components/hello-wave";
-import ParallaxScrollView from "@/components/parallax-scroll-view";
+import {
+  StyleSheet,
+  View,
+  ScrollView,
+  Pressable,
+  TextInput,
+  Alert,
+  Modal,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useState } from "react";
+import * as Haptics from "expo-haptics";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { getLoginUrl } from "@/constants/oauth";
-import { useAuth } from "@/hooks/use-auth";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import { useAttendances } from "@/hooks/use-attendances";
+import type { Attendance, AttendanceStatus } from "@/types/attendance";
+import {
+  STATUS_LABELS,
+  getNextStatus,
+  validateLicensePlate,
+  formatLicensePlate,
+  getElapsedTime,
+} from "@/types/attendance";
+import { Colors } from "@/constants/theme";
 
-export default function HomeScreen() {
-  const { user, loading, isAuthenticated, logout } = useAuth();
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const router = useRouter();
+export default function AdminScreen() {
+  const insets = useSafeAreaInsets();
+  const backgroundColor = useThemeColor({}, "background");
+  const tintColor = useThemeColor({}, "tint");
+  const cardBackground = useThemeColor({}, "cardBackground");
+  const borderColor = useThemeColor({}, "border");
 
-  useEffect(() => {
-    console.log("[HomeScreen] Auth state:", {
-      hasUser: !!user,
-      loading,
-      isAuthenticated,
-      user: user ? { id: user.id, openId: user.openId, name: user.name, email: user.email } : null,
-    });
-  }, [user, loading, isAuthenticated]);
+  const {
+    attendances,
+    loading,
+    createAttendance,
+    updateAttendanceStatus,
+    deleteAttendance,
+  } = useAttendances();
 
-  const handleLogin = async () => {
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [licensePlate, setLicensePlate] = useState("");
+  const [vehicleModel, setVehicleModel] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<AttendanceStatus | "all">("all");
+
+  const handleCreateAttendance = async () => {
+    if (!licensePlate.trim()) {
+      Alert.alert("Erro", "Por favor, informe a placa do veículo");
+      return;
+    }
+
+    if (!validateLicensePlate(licensePlate)) {
+      Alert.alert("Erro", "Formato de placa inválido. Use ABC-1234 ou ABC1D34");
+      return;
+    }
+
+    if (!vehicleModel.trim()) {
+      Alert.alert("Erro", "Por favor, informe o modelo do veículo");
+      return;
+    }
+
     try {
-      console.log("[Auth] Login button clicked");
-      setIsLoggingIn(true);
-      const loginUrl = getLoginUrl();
-      console.log("[Auth] Generated login URL:", loginUrl);
+      setSubmitting(true);
+      await createAttendance({
+        licensePlate: formatLicensePlate(licensePlate),
+        vehicleModel,
+        customerName: customerName.trim() || undefined,
+        description: description.trim() || undefined,
+      });
 
-      // On web, use direct redirect in same tab
-      // On mobile, use WebBrowser to open OAuth in a separate context
-      if (Platform.OS === "web") {
-        console.log("[Auth] Web platform: redirecting to OAuth in same tab...");
-        window.location.href = loginUrl;
-        return;
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-
-      // Mobile: Open OAuth URL in browser
-      // The OAuth server will redirect to our deep link (manusapp://oauth/callback?code=...&state=...)
-      console.log("[Auth] Opening OAuth URL in browser...");
-      const result = await WebBrowser.openAuthSessionAsync(
-        loginUrl,
-        undefined, // Deep link is already configured in getLoginUrl, so no need to specify here
-        {
-          preferEphemeralSession: false,
-          showInRecents: true,
-        },
-      );
-
-      console.log("[Auth] WebBrowser result:", result);
-      if (result.type === "cancel") {
-        console.log("[Auth] OAuth cancelled by user");
-      } else if (result.type === "dismiss") {
-        console.log("[Auth] OAuth dismissed");
-      } else if (result.type === "success" && result.url) {
-        console.log("[Auth] OAuth session successful, navigating to callback:", result.url);
-        // Extract code and state from the URL
-        try {
-          // Parse the URL - it might be exp:// or a regular URL
-          let url: URL;
-          if (result.url.startsWith("exp://") || result.url.startsWith("exps://")) {
-            // For exp:// URLs, we need to parse them differently
-            // Format: exp://192.168.31.156:8081/--/oauth/callback?code=...&state=...
-            const urlStr = result.url.replace(/^exp(s)?:\/\//, "http://");
-            url = new URL(urlStr);
-          } else {
-            url = new URL(result.url);
-          }
-
-          const code = url.searchParams.get("code");
-          const state = url.searchParams.get("state");
-          const error = url.searchParams.get("error");
-
-          console.log("[Auth] Extracted params from callback URL:", {
-            code: code?.substring(0, 20) + "...",
-            state: state?.substring(0, 20) + "...",
-            error,
-          });
-
-          if (error) {
-            console.error("[Auth] OAuth error in callback:", error);
-            return;
-          }
-
-          if (code && state) {
-            // Navigate to callback route with params
-            console.log("[Auth] Navigating to callback route with params...");
-            router.push({
-              pathname: "/oauth/callback" as any,
-              params: { code, state },
-            });
-          } else {
-            console.error("[Auth] Missing code or state in callback URL");
-          }
-        } catch (err) {
-          console.error("[Auth] Failed to parse callback URL:", err, result.url);
-          // Fallback: try parsing with regex
-          const codeMatch = result.url.match(/[?&]code=([^&]+)/);
-          const stateMatch = result.url.match(/[?&]state=([^&]+)/);
-
-          if (codeMatch && stateMatch) {
-            const code = decodeURIComponent(codeMatch[1]);
-            const state = decodeURIComponent(stateMatch[1]);
-            console.log("[Auth] Fallback: extracted params via regex, navigating...");
-            router.push({
-              pathname: "/oauth/callback" as any,
-              params: { code, state },
-            });
-          } else {
-            console.error("[Auth] Could not extract code/state from URL");
-          }
-        }
-      }
+      setShowNewModal(false);
+      setLicensePlate("");
+      setVehicleModel("");
+      setCustomerName("");
+      setDescription("");
     } catch (error) {
-      console.error("[Auth] Login error:", error);
+      Alert.alert("Erro", "Não foi possível criar o atendimento");
     } finally {
-      setIsLoggingIn(false);
+      setSubmitting(false);
     }
   };
 
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
-      headerImage={
-        <Image
-          source={require("@/assets/images/partial-react-logo.png")}
-          style={styles.reactLogo}
-        />
-      }
-    >
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.authContainer}>
-        {loading ? (
-          <ActivityIndicator />
-        ) : isAuthenticated && user ? (
-          <ThemedView style={styles.userInfo}>
-            <ThemedText type="subtitle">Logged in as</ThemedText>
-            <ThemedText type="defaultSemiBold">{user.name || user.email || user.openId}</ThemedText>
-            <Pressable onPress={logout} style={styles.logoutButton}>
-              <ThemedText style={styles.logoutText}>Logout</ThemedText>
-            </Pressable>
-          </ThemedView>
-        ) : (
-          <Pressable
-            onPress={handleLogin}
-            disabled={isLoggingIn}
-            style={[styles.loginButton, isLoggingIn && styles.loginButtonDisabled]}
-          >
-            {isLoggingIn ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <ThemedText style={styles.loginText}>Login</ThemedText>
-            )}
-          </Pressable>
-        )}
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{" "}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: "cmd + d",
-              android: "cmd + m",
-              web: "F12",
-            })}
-          </ThemedText>{" "}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert("Action pressed")} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert("Share pressed")}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert("Delete pressed")}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const handleUpdateStatus = async (attendance: Attendance) => {
+    const nextStatus = getNextStatus(attendance.status);
+    if (!nextStatus) {
+      Alert.alert(
+        "Atendimento Finalizado",
+        "Este atendimento já está finalizado. Deseja removê-lo?",
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Remover",
+            style: "destructive",
+            onPress: () => handleDelete(attendance.id),
+          },
+        ]
+      );
+      return;
+    }
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{" "}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{" "}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{" "}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    try {
+      await updateAttendanceStatus(Number(attendance.id), nextStatus);
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível atualizar o status");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteAttendance(Number(id));
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível remover o atendimento");
+    }
+  };
+
+  const filteredAttendances =
+    selectedFilter === "all"
+      ? attendances
+      : attendances.filter((a) => a.status === selectedFilter);
+
+  const getStatusColor = (status: AttendanceStatus) => {
+    const colorScheme = "light";
+    return Colors[colorScheme][`status${status.charAt(0).toUpperCase() + status.slice(1).replace(/_./g, (m) => m[1].toUpperCase())}` as keyof typeof Colors.light] as string;
+  };
+
+  return (
+    <ThemedView style={[styles.container, { backgroundColor }]}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: Math.max(insets.top, 20) + 20,
+            paddingBottom: Math.max(insets.bottom, 20) + 80,
+          },
+        ]}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <ThemedText type="title">Painel Administrativo</ThemedText>
+          <ThemedText style={styles.subtitle}>
+            Gerencie os atendimentos em tempo real
+          </ThemedText>
+        </View>
+
+        {/* Filtros */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filters}>
+          <Pressable
+            style={[
+              styles.filterButton,
+              { backgroundColor: cardBackground, borderColor },
+              selectedFilter === "all" && { backgroundColor: tintColor, borderColor: tintColor },
+            ]}
+            onPress={() => setSelectedFilter("all")}
+          >
+            <ThemedText
+              style={[
+                styles.filterText,
+                selectedFilter === "all" && styles.filterTextActive,
+              ]}
+            >
+              Todos ({attendances.length})
+            </ThemedText>
+          </Pressable>
+
+          {(["arrival", "waiting", "in_service", "completed"] as AttendanceStatus[]).map(
+            (status) => {
+              const count = attendances.filter((a) => a.status === status).length;
+              return (
+                <Pressable
+                  key={status}
+                  style={[
+                    styles.filterButton,
+                    { backgroundColor: cardBackground, borderColor },
+                    selectedFilter === status && { backgroundColor: tintColor, borderColor: tintColor },
+                  ]}
+                  onPress={() => setSelectedFilter(status)}
+                >
+                  <ThemedText
+                    style={[
+                      styles.filterText,
+                      selectedFilter === status && styles.filterTextActive,
+                    ]}
+                  >
+                    {STATUS_LABELS[status]} ({count})
+                  </ThemedText>
+                </Pressable>
+              );
+            }
+          )}
+        </ScrollView>
+
+        {/* Lista de Atendimentos */}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={tintColor} />
+          </View>
+        ) : filteredAttendances.length === 0 ? (
+          <View style={styles.emptyState}>
+            <ThemedText style={styles.emptyText}>Nenhum atendimento encontrado</ThemedText>
+          </View>
+        ) : (
+          filteredAttendances.map((attendance) => (
+            <View key={attendance.id} style={[styles.card, { backgroundColor: cardBackground }]}>
+              <View
+                style={[
+                  styles.statusIndicator,
+                  { backgroundColor: getStatusColor(attendance.status) },
+                ]}
+              />
+
+              <View style={styles.cardContent}>
+                <View style={styles.cardHeader}>
+                  <ThemedText type="subtitle" style={styles.licensePlate}>
+                    {attendance.licensePlate}
+                  </ThemedText>
+                  <ThemedText style={styles.elapsedTime}>
+                    {getElapsedTime(attendance.createdAt)}
+                  </ThemedText>
+                </View>
+
+                <ThemedText style={styles.vehicleModel}>{attendance.vehicleModel}</ThemedText>
+
+                {attendance.customerName && (
+                  <ThemedText style={styles.customerName}>
+                    Cliente: {attendance.customerName}
+                  </ThemedText>
+                )}
+
+                {attendance.description && (
+                  <ThemedText style={styles.description} numberOfLines={2}>
+                    {attendance.description}
+                  </ThemedText>
+                )}
+
+                <View style={styles.cardActions}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: getStatusColor(attendance.status) },
+                    ]}
+                  >
+                    <ThemedText style={styles.statusBadgeText}>
+                      {STATUS_LABELS[attendance.status]}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.actionButtons}>
+                    <Pressable
+                      style={[styles.actionButton, { backgroundColor: tintColor }]}
+                      onPress={() => handleUpdateStatus(attendance)}
+                    >
+                      <ThemedText style={styles.actionButtonText}>
+                        {getNextStatus(attendance.status)
+                          ? `→ ${STATUS_LABELS[getNextStatus(attendance.status)!]}`
+                          : "Finalizado"}
+                      </ThemedText>
+                    </Pressable>
+
+                    <Pressable
+                      style={[styles.deleteButton, { borderColor: "#FF3B30" }]}
+                      onPress={() => {
+                        Alert.alert(
+                          "Remover Atendimento",
+                          `Deseja remover o atendimento ${attendance.licensePlate}?`,
+                          [
+                            { text: "Cancelar", style: "cancel" },
+                            {
+                              text: "Remover",
+                              style: "destructive",
+                              onPress: () => handleDelete(attendance.id),
+                            },
+                          ]
+                        );
+                      }}
+                    >
+                      <ThemedText style={[styles.deleteButtonText, { color: "#FF3B30" }]}>
+                        ✕
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </View>
+          ))
+        )}
+      </ScrollView>
+
+      {/* Botão Flutuante para Adicionar */}
+      <Pressable
+        style={[
+          styles.fab,
+          {
+            backgroundColor: tintColor,
+            bottom: Math.max(insets.bottom, 20) + 60,
+          },
+        ]}
+        onPress={() => setShowNewModal(true)}
+      >
+        <ThemedText style={styles.fabText}>+</ThemedText>
+      </Pressable>
+
+      {/* Modal de Novo Atendimento */}
+      <Modal
+        visible={showNewModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowNewModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              {
+                backgroundColor,
+                paddingBottom: Math.max(insets.bottom, 20) + 20,
+              },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <ThemedText type="subtitle">Novo Atendimento</ThemedText>
+              <Pressable onPress={() => setShowNewModal(false)}>
+                <ThemedText style={styles.closeButton}>✕</ThemedText>
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.modalScroll}>
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>Placa do Veículo *</ThemedText>
+                <TextInput
+                  style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
+                  value={licensePlate}
+                  onChangeText={setLicensePlate}
+                  placeholder="ABC-1234 ou ABC1D34"
+                  placeholderTextColor="#999"
+                  autoCapitalize="characters"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>Modelo do Veículo *</ThemedText>
+                <TextInput
+                  style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
+                  value={vehicleModel}
+                  onChangeText={setVehicleModel}
+                  placeholder="Ex: VW Nivus Highline"
+                  placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>Nome do Cliente</ThemedText>
+                <TextInput
+                  style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
+                  value={customerName}
+                  onChangeText={setCustomerName}
+                  placeholder="Opcional"
+                  placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>Descrição</ThemedText>
+                <TextInput
+                  style={[
+                    styles.input,
+                    styles.textArea,
+                    { backgroundColor: cardBackground, borderColor },
+                  ]}
+                  value={description}
+                  onChangeText={setDescription}
+                  placeholder="Detalhes do atendimento (opcional)"
+                  placeholderTextColor="#999"
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+
+              <Pressable
+                style={[
+                  styles.submitButton,
+                  { backgroundColor: tintColor },
+                  submitting && styles.submitButtonDisabled,
+                ]}
+                onPress={handleCreateAttendance}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <ThemedText style={styles.submitButtonText}>Criar Atendimento</ThemedText>
+                )}
+              </Pressable>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  container: {
+    flex: 1,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  scrollView: {
+    flex: 1,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: "absolute",
+  scrollContent: {
+    paddingHorizontal: 20,
   },
-  authContainer: {
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 8,
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
+  header: {
+    marginBottom: 24,
   },
-  userInfo: {
-    gap: 8,
-    alignItems: "center",
-  },
-  loginButton: {
-    backgroundColor: "#007AFF",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  loginButtonDisabled: {
-    opacity: 0.6,
-  },
-  loginText: {
-    color: "#fff",
+  subtitle: {
     fontSize: 16,
+    opacity: 0.7,
+    marginTop: 8,
+  },
+  filters: {
+    marginBottom: 24,
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+  },
+  filterText: {
+    fontSize: 14,
     fontWeight: "600",
   },
-  logoutButton: {
-    marginTop: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    backgroundColor: "rgba(255, 59, 48, 0.1)",
+  filterTextActive: {
+    color: "#FFFFFF",
   },
-  logoutText: {
-    color: "#FF3B30",
+  loadingContainer: {
+    paddingVertical: 40,
+    alignItems: "center",
+  },
+  emptyState: {
+    paddingVertical: 60,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 16,
+    opacity: 0.5,
+  },
+  card: {
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: "hidden",
+    flexDirection: "row",
+  },
+  statusIndicator: {
+    width: 4,
+  },
+  cardContent: {
+    flex: 1,
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  licensePlate: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  elapsedTime: {
+    fontSize: 12,
+    opacity: 0.6,
+  },
+  vehicleModel: {
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  customerName: {
     fontSize: 14,
-    fontWeight: "500",
+    opacity: 0.8,
+    marginBottom: 4,
+  },
+  description: {
+    fontSize: 14,
+    opacity: 0.7,
+    marginBottom: 12,
+  },
+  cardActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  statusBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  actionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minHeight: 36,
+    justifyContent: "center",
+  },
+  actionButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  deleteButtonText: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  fab: {
+    position: "absolute",
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  fabText: {
+    color: "#FFFFFF",
+    fontSize: 32,
+    fontWeight: "300",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "90%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E1E4E8",
+  },
+  closeButton: {
+    fontSize: 24,
+    opacity: 0.6,
+  },
+  modalScroll: {
+    padding: 20,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  textArea: {
+    minHeight: 100,
+    textAlignVertical: "top",
+  },
+  submitButton: {
+    paddingVertical: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

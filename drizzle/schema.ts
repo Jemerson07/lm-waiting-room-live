@@ -25,4 +25,21 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+/**
+ * Tabela de atendimentos veiculares
+ */
+export const attendances = mysqlTable("attendances", {
+  id: int("id").autoincrement().primaryKey(),
+  licensePlate: varchar("licensePlate", { length: 10 }).notNull(),
+  vehicleModel: varchar("vehicleModel", { length: 100 }).notNull(),
+  customerName: varchar("customerName", { length: 255 }),
+  status: mysqlEnum("status", ["arrival", "waiting", "in_service", "completed"])
+    .default("arrival")
+    .notNull(),
+  description: text("description"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Attendance = typeof attendances.$inferSelect;
+export type InsertAttendance = typeof attendances.$inferInsert;
