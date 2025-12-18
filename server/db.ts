@@ -106,6 +106,7 @@ export async function getAllAttendances() {
 export async function createAttendance(data: {
   licensePlate: string;
   vehicleModel: string;
+  serviceType: "tire" | "corrective" | "preventive";
   customerName?: string;
   description?: string;
 }) {
@@ -118,6 +119,7 @@ export async function createAttendance(data: {
   const result = await db.insert(attendances).values({
     licensePlate: data.licensePlate,
     vehicleModel: data.vehicleModel,
+    serviceType: data.serviceType,
     customerName: data.customerName,
     description: data.description,
     status: "arrival",

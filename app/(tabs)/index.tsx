@@ -19,6 +19,8 @@ import { useAttendances } from "@/hooks/use-attendances";
 import type { Attendance, AttendanceStatus } from "@/types/attendance";
 import {
   STATUS_LABELS,
+  SERVICE_TYPE_LABELS,
+  SERVICE_TYPE_ICONS,
   getNextStatus,
   validateLicensePlate,
   formatLicensePlate,
@@ -44,6 +46,7 @@ export default function AdminScreen() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [licensePlate, setLicensePlate] = useState("");
   const [vehicleModel, setVehicleModel] = useState("");
+  const [serviceType, setServiceType] = useState<"tire" | "corrective" | "preventive">("preventive");
   const [customerName, setCustomerName] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -70,6 +73,7 @@ export default function AdminScreen() {
       await createAttendance({
         licensePlate: formatLicensePlate(licensePlate),
         vehicleModel,
+        serviceType,
         customerName: customerName.trim() || undefined,
         description: description.trim() || undefined,
       });
@@ -80,6 +84,7 @@ export default function AdminScreen() {
       setShowNewModal(false);
       setLicensePlate("");
       setVehicleModel("");
+      setServiceType("preventive");
       setCustomerName("");
       setDescription("");
     } catch (error) {
@@ -236,6 +241,12 @@ export default function AdminScreen() {
 
                 <ThemedText style={styles.vehicleModel}>{attendance.vehicleModel}</ThemedText>
 
+                <View style={styles.serviceTypeBadgeAdmin}>
+                  <ThemedText style={styles.serviceTypeTextAdmin}>
+                    {SERVICE_TYPE_ICONS[attendance.serviceType]} {SERVICE_TYPE_LABELS[attendance.serviceType]}
+                  </ThemedText>
+                </View>
+
                 {attendance.customerName && (
                   <ThemedText style={styles.customerName}>
                     Cliente: {attendance.customerName}
@@ -361,6 +372,48 @@ export default function AdminScreen() {
                   placeholder="Ex: VW Nivus Highline"
                   placeholderTextColor="#999"
                 />
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>Tipo de Serviço *</ThemedText>
+                <View style={styles.serviceTypeContainer}>
+                  <Pressable
+                    style={[
+                      styles.serviceTypeButton,
+                      { backgroundColor: cardBackground, borderColor },
+                      serviceType === "tire" && { backgroundColor: tintColor, borderColor: tintColor },
+                    ]}
+                    onPress={() => setServiceType("tire")}
+                  >
+                    <ThemedText style={[styles.serviceTypeText, serviceType === "tire" && styles.serviceTypeTextActive]}>
+                      🔧 Pneu
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.serviceTypeButton,
+                      { backgroundColor: cardBackground, borderColor },
+                      serviceType === "corrective" && { backgroundColor: tintColor, borderColor: tintColor },
+                    ]}
+                    onPress={() => setServiceType("corrective")}
+                  >
+                    <ThemedText style={[styles.serviceTypeText, serviceType === "corrective" && styles.serviceTypeTextActive]}>
+                      ⚠️ Corretiva
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.serviceTypeButton,
+                      { backgroundColor: cardBackground, borderColor },
+                      serviceType === "preventive" && { backgroundColor: tintColor, borderColor: tintColor },
+                    ]}
+                    onPress={() => setServiceType("preventive")}
+                  >
+                    <ThemedText style={[styles.serviceTypeText, serviceType === "preventive" && styles.serviceTypeTextActive]}>
+                      ✓ Preventiva
+                    </ThemedText>
+                  </Pressable>
+                </View>
               </View>
 
               <View style={styles.formGroup}>
@@ -623,5 +676,40 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
+  },
+  serviceTypeContainer: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  serviceTypeButton: {
+    flex: 1,
+    minWidth: 100,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  serviceTypeText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  serviceTypeTextActive: {
+    color: "#FFFFFF",
+  },
+  serviceTypeBadgeAdmin: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(0, 102, 204, 0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  serviceTypeTextAdmin: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#0066CC",
   },
 });

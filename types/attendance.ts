@@ -3,6 +3,7 @@
  */
 
 export type AttendanceStatus = "arrival" | "waiting" | "in_service" | "completed";
+export type ServiceType = "tire" | "corrective" | "preventive";
 
 export interface Attendance {
   id: string;
@@ -10,6 +11,7 @@ export interface Attendance {
   vehicleModel: string; // Ex: VW Nivus Highline
   customerName?: string; // Nome do cliente ou empresa
   status: AttendanceStatus;
+  serviceType: ServiceType; // Tipo de serviço
   description?: string;
   createdAt: number; // Timestamp em milissegundos
   updatedAt: number; // Timestamp em milissegundos
@@ -18,6 +20,7 @@ export interface Attendance {
 export interface AttendanceFormData {
   licensePlate: string;
   vehicleModel: string;
+  serviceType: ServiceType;
   customerName?: string;
   description?: string;
 }
@@ -28,6 +31,20 @@ export const STATUS_LABELS: Record<AttendanceStatus, string> = {
   waiting: "Aguardando",
   in_service: "Em Manutenção",
   completed: "Finalizada",
+};
+
+// Mapeamento de tipos de serviço para labels em português
+export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
+  tire: "Pneu",
+  corrective: "Corretiva",
+  preventive: "Preventiva",
+};
+
+// Mapeamento de tipos de serviço para ícones
+export const SERVICE_TYPE_ICONS: Record<ServiceType, string> = {
+  tire: "🔧",
+  corrective: "⚠️",
+  preventive: "✓",
 };
 
 // Ordem de progressão dos status

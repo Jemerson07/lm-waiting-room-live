@@ -1,0 +1,1 @@
+ALTER TABLE `attendances` ADD `serviceType` enum('tire','corrective','preventive') NOT NULL;

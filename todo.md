@@ -26,3 +26,13 @@
 - [x] Feedback háptico para ações
 - [x] Gerar logo personalizado do aplicativo
 - [x] Atualizar branding no app.config.ts
+
+## Novas Funcionalidades Solicitadas
+
+- [x] Adicionar imagem do VW Nivus ao projeto
+- [x] Criar background animado com imagem do Nivus na tela Live
+- [x] Adicionar campo de tipo de serviço no schema (Pneu, Corretiva, Preventiva)
+- [x] Atualizar formulário Admin com seleção de tipo de serviço
+- [x] Exibir flags de tipo de serviço nos cards da tela Live
+- [x] Atualizar tipos TypeScript para incluir serviceType
+- [x] Testar sistema via desktop/web

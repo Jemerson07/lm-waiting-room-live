@@ -36,6 +36,8 @@ export const attendances = mysqlTable("attendances", {
   status: mysqlEnum("status", ["arrival", "waiting", "in_service", "completed"])
     .default("arrival")
     .notNull(),
+  serviceType: mysqlEnum("serviceType", ["tire", "corrective", "preventive"])
+    .notNull(),
   description: text("description"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

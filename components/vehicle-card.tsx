@@ -9,7 +9,7 @@ import Animated, {
 import { useEffect } from "react";
 import { ThemedText } from "./themed-text";
 import type { Attendance } from "@/types/attendance";
-import { STATUS_LABELS } from "@/types/attendance";
+import { STATUS_LABELS, SERVICE_TYPE_LABELS, SERVICE_TYPE_ICONS } from "@/types/attendance";
 import { Colors } from "@/constants/theme";
 
 interface VehicleCardProps {
@@ -62,6 +62,12 @@ export function VehicleCard({ attendance, showAnimation = false }: VehicleCardPr
         </View>
 
         <ThemedText style={styles.vehicleModel}>{attendance.vehicleModel}</ThemedText>
+
+        <View style={styles.serviceTypeBadge}>
+          <ThemedText style={styles.serviceTypeText}>
+            {SERVICE_TYPE_ICONS[attendance.serviceType]} {SERVICE_TYPE_LABELS[attendance.serviceType]}
+          </ThemedText>
+        </View>
 
         {attendance.customerName && (
           <ThemedText style={styles.customerName}>Cliente: {attendance.customerName}</ThemedText>
@@ -123,5 +129,19 @@ const styles = StyleSheet.create({
   pulseIndicator: {
     height: 4,
     width: "100%",
+  },
+  serviceTypeBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(0, 102, 204, 0.15)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  serviceTypeText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0066CC",
   },
 });

@@ -36,6 +36,7 @@ export function useAttendances() {
     async (data: {
       licensePlate: string;
       vehicleModel: string;
+      serviceType: "tire" | "corrective" | "preventive";
       customerName?: string;
       description?: string;
     }) => {
@@ -72,6 +73,7 @@ export function useAttendances() {
     vehicleModel: att.vehicleModel,
     customerName: att.customerName ?? undefined,
     status: att.status as AttendanceStatus,
+    serviceType: att.serviceType as "tire" | "corrective" | "preventive",
     description: att.description ?? undefined,
     createdAt: new Date(att.createdAt).getTime(),
     updatedAt: new Date(att.updatedAt).getTime(),

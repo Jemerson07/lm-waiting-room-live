@@ -29,6 +29,7 @@ export const appRouter = router({
         z.object({
           licensePlate: z.string(),
           vehicleModel: z.string(),
+          serviceType: z.enum(["tire", "corrective", "preventive"]),
           customerName: z.string().optional(),
           description: z.string().optional(),
         })

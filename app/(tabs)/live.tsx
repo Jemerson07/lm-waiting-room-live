@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Image } from "expo-image";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { AnimatedBackground } from "@/components/animated-background";
+import { NivusBackground } from "@/components/nivus-background";
 import { VehicleCard } from "@/components/vehicle-card";
 import { useAttendances } from "@/hooks/use-attendances";
 import { useCompanySettings } from "@/hooks/use-company-settings";
@@ -54,8 +54,8 @@ export default function LiveScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* Background animado com gradiente azul */}
-      <AnimatedBackground />
+      {/* Background animado com imagem do VW Nivus */}
+      <NivusBackground />
 
       <ScrollView
         style={styles.scrollView}

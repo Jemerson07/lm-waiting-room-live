@@ -15,6 +15,13 @@
       "when": 1766085386565,
       "tag": "0001_chunky_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1766086083701,
+      "tag": "0002_early_shinobi_shaw",
+      "breakpoints": true
     }
   ]
 }
