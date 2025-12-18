@@ -5,13 +5,11 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { useCompanySettings } from "@/hooks/use-company-settings";
 
 interface LiveHeaderProps {
-  currentTime: string;
   totalAttendances: number;
   completedAttendances: number;
 }
 
 export function LiveHeader({
-  currentTime,
   totalAttendances,
   completedAttendances,
 }: LiveHeaderProps) {
@@ -42,36 +40,8 @@ export function LiveHeader({
         </View>
       </View>
 
-      {/* Informações de Status */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <ThemedText style={styles.statLabel}>Horário</ThemedText>
-          <ThemedText style={[styles.statValue, { color: tintColor }]}>
-            {currentTime}
-          </ThemedText>
-        </View>
-
-        <View style={styles.statCard}>
-          <ThemedText style={styles.statLabel}>Atendimentos</ThemedText>
-          <ThemedText style={[styles.statValue, { color: tintColor }]}>
-            {totalAttendances}
-          </ThemedText>
-        </View>
-
-        <View style={styles.statCard}>
-          <ThemedText style={styles.statLabel}>Concluídos</ThemedText>
-          <ThemedText style={[styles.statValue, { color: "#00C853" }]}>
-            {completedAttendances}
-          </ThemedText>
-        </View>
-
-        <View style={styles.statCard}>
-          <ThemedText style={styles.statLabel}>Taxa</ThemedText>
-          <ThemedText style={[styles.statValue, { color: "#0052A3" }]}>
-            {completionRate}%
-          </ThemedText>
-        </View>
-      </View>
+      {/* Informações de Status - Apenas na Admin */}
+      {/* Removido da tela Live para melhor visibilidade do background */}
     </View>
   );
 }
@@ -79,53 +49,31 @@ export function LiveHeader({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(0, 82, 163, 0.1)",
   },
   headerTop: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 8,
   },
   logo: {
-    width: 100,
-    height: 50,
-    marginRight: 16,
+    width: 90,
+    height: 45,
+    marginRight: 12,
   },
   companyInfo: {
     flex: 1,
   },
   companyName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
-    marginBottom: 2,
+    marginBottom: 1,
   },
   companySubtitle: {
-    fontSize: 12,
-    opacity: 0.6,
-  },
-  statsContainer: {
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "space-between",
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: "rgba(0, 82, 163, 0.05)",
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  statLabel: {
     fontSize: 11,
     opacity: 0.6,
-    marginBottom: 4,
-    fontWeight: "500",
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
+
 });

@@ -47,3 +47,13 @@
 - [x] Otimizar layout para desktop (responsividade)
 - [x] Implementar correções de UX e bugs
 - [x] Realizar testes completos do sistema
+
+
+## Próximos Passos Solicitados
+
+- [x] Remover informações de tempo da tela Live
+- [x] Aumentar visibilidade do background animado do VW Nivus
+- [x] Melhorar animações do background
+- [x] Implementar relatório de produtividade
+- [x] Adicionar notificações push
+- [x] Criar modo tela cheia para TV
