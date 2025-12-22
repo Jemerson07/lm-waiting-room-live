@@ -57,3 +57,15 @@
 - [x] Implementar relatório de produtividade
 - [x] Adicionar notificações push
 - [x] Criar modo tela cheia para TV
+
+
+## Correções de Usabilidade
+
+- [x] Funcionalizar botão de exclusão com confirmação
+- [x] Padronizar componentes em todo o sistema
+- [x] Melhorar feedback visual de ações
+- [x] Adicionar animações de transição
+- [x] Corrigir espaçamentos e alinhamentos
+- [x] Melhorar acessibilidade (contraste, tamanho de texto)
+- [x] Adicionar validações de formulário
+- [x] Melhorar responsividade em mobile

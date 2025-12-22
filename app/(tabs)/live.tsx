@@ -1,4 +1,11 @@
-import { StyleSheet, View, ScrollView, RefreshControl, Dimensions } from "react-native";
+import {
+  StyleSheet,
+  View,
+  ScrollView,
+  RefreshControl,
+  useWindowDimensions,
+  Dimensions,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEffect, useState, useCallback } from "react";
 import { Image } from "expo-image";

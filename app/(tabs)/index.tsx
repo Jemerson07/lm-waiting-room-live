@@ -284,11 +284,20 @@ export default function AdminScreen() {
                     </Pressable>
 
                     <Pressable
-                      style={[styles.deleteButton, { borderColor: "#FF3B30" }]}
+                      style={({ pressed }) => [
+                        styles.deleteButton,
+                        {
+                          backgroundColor: pressed ? "rgba(255, 59, 48, 0.1)" : "transparent",
+                          borderColor: "#FF3B30",
+                        },
+                      ]}
                       onPress={() => {
+                        if (Platform.OS !== "web") {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }
                         Alert.alert(
                           "Remover Atendimento",
-                          `Deseja remover o atendimento ${attendance.licensePlate}?`,
+                          `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`,
                           [
                             { text: "Cancelar", style: "cancel" },
                             {
@@ -301,7 +310,7 @@ export default function AdminScreen() {
                       }}
                     >
                       <ThemedText style={[styles.deleteButtonText, { color: "#FF3B30" }]}>
-                        ✕
+                        ✗
                       </ThemedText>
                     </Pressable>
                   </View>

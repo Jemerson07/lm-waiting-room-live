@@ -11,16 +11,16 @@ const tintColorDark = "#0066CC";
 export const Colors = {
   light: {
     text: "#1a1a2e",
-    background: "#f8f9fa",
+    background: "#ffffff",
     tint: tintColorLight,
-    icon: "#0052A3",
-    tabIconDefault: "#999",
+    icon: "#555555",
+    tabIconDefault: "#888888",
     tabIconSelected: tintColorLight,
-    cardBackground: "#ffffff",
-    border: "#e0e0e0",
-    // Status colors
+    cardBackground: "#f5f7fa",
+    border: "#d0d7de",
+    // Status colors with better contrast
     statusArrival: "#0052A3",
-    statusWaiting: "#FFA500",
+    statusWaiting: "#FF9800",
     statusInService: "#FF6B00",
     statusCompleted: "#00C853",
   },
