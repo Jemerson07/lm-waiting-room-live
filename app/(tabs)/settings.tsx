@@ -241,10 +241,17 @@ export default function SettingsScreen() {
               thumbColor="#fff"
             />
           </View>
+
+          <View style={styles.divider} />
+
+          <View style={[styles.infoBox, { backgroundColor: "rgba(0, 82, 163, 0.05)" }]}>
+            <ThemedText style={styles.infoText}>
+              ud83dudcf1 WhatsApp: Notificau00e7u00f5es automu00e1ticas seru00e3o enviadas aos clientes quando o status do veu00edculo mudar, desde que o nu00famero de telefone seja fornecido no formulário de atendimento.
+            </ThemedText>
+          </View>
         </View>
 
-        {/* Seção: Sistema */}
-        <View style={[styles.section, { backgroundColor: cardBackground }]}>
+        {/* Seu00e7u00e3o: Sistema */}     <View style={[styles.section, { backgroundColor: cardBackground }]}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>
             ⚙️ Sistema
           </ThemedText>
@@ -400,6 +407,18 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "rgba(0, 0, 0, 0.1)",
     marginVertical: 12,
+  },
+  infoBox: {
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: "#0052A3",
+  },
+  infoText: {
+    fontSize: 14,
+    lineHeight: 20,
+    opacity: 0.8,
   },
   aboutContainer: {
     alignItems: "center",

@@ -1,0 +1,2 @@
+ALTER TABLE `attendances` ADD `customerPhone` varchar(20);--> statement-breakpoint
+ALTER TABLE `attendances` ADD `whatsappNotificationSent` enum('none','arrival','waiting','in_service','completed') DEFAULT 'none' NOT NULL;

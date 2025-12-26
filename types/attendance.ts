@@ -10,9 +10,11 @@ export interface Attendance {
   licensePlate: string; // Formato: ABC-1234 ou ABC1D34 (Mercosul)
   vehicleModel: string; // Ex: VW Nivus Highline
   customerName?: string; // Nome do cliente ou empresa
+  customerPhone?: string; // Telefone do cliente para WhatsApp
   status: AttendanceStatus;
   serviceType: ServiceType; // Tipo de serviço
   description?: string;
+  whatsappNotificationSent?: AttendanceStatus; // Último status notificado via WhatsApp
   createdAt: number; // Timestamp em milissegundos
   updatedAt: number; // Timestamp em milissegundos
 }
@@ -22,6 +24,7 @@ export interface AttendanceFormData {
   vehicleModel: string;
   serviceType: ServiceType;
   customerName?: string;
+  customerPhone?: string;
   description?: string;
 }
 

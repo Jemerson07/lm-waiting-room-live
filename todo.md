@@ -69,3 +69,14 @@
 - [x] Melhorar acessibilidade (contraste, tamanho de texto)
 - [x] Adicionar validações de formulário
 - [x] Melhorar responsividade em mobile
+
+
+## Integração WhatsApp
+
+- [x] Configurar credenciais do Twilio/WhatsApp
+- [x] Adicionar campo de telefone no formulário de atendimento
+- [x] Criar serviço de envio de mensagens WhatsApp
+- [x] Implementar notificações automáticas por mudança de status
+- [x] Adicionar controles nas configurações (ativar/desativar)
+- [x] Criar templates de mensagens personalizáveis
+- [x] Testar envio de mensagens

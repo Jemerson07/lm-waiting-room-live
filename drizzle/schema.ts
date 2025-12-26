@@ -33,12 +33,16 @@ export const attendances = mysqlTable("attendances", {
   licensePlate: varchar("licensePlate", { length: 10 }).notNull(),
   vehicleModel: varchar("vehicleModel", { length: 100 }).notNull(),
   customerName: varchar("customerName", { length: 255 }),
+  customerPhone: varchar("customerPhone", { length: 20 }),
   status: mysqlEnum("status", ["arrival", "waiting", "in_service", "completed"])
     .default("arrival")
     .notNull(),
   serviceType: mysqlEnum("serviceType", ["tire", "corrective", "preventive"])
     .notNull(),
   description: text("description"),
+  whatsappNotificationSent: mysqlEnum("whatsappNotificationSent", ["none", "arrival", "waiting", "in_service", "completed"])
+    .default("none")
+    .notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

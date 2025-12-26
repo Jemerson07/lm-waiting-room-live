@@ -108,6 +108,7 @@ export async function createAttendance(data: {
   vehicleModel: string;
   serviceType: "tire" | "corrective" | "preventive";
   customerName?: string;
+  customerPhone?: string;
   description?: string;
 }) {
   const db = await getDb();
@@ -121,8 +122,10 @@ export async function createAttendance(data: {
     vehicleModel: data.vehicleModel,
     serviceType: data.serviceType,
     customerName: data.customerName,
+    customerPhone: data.customerPhone,
     description: data.description,
     status: "arrival",
+    whatsappNotificationSent: "none",
   });
 
   return result;
@@ -146,4 +149,48 @@ export async function deleteAttendance(id: number) {
 
   const { attendances } = await import("../drizzle/schema");
   await db.delete(attendances).where(eq(attendances.id, id));
+}
+
+
+export async function updateAttendanceStatusWithWhatsApp(
+  id: number,
+  status: "arrival" | "waiting" | "in_service" | "completed",
+  sendWhatsApp: boolean = true
+) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const { attendances } = await import("../drizzle/schema");
+  const { sendStatusNotification } = await import("./whatsapp-service");
+
+  // Buscar dados do atendimento
+  const result = await db.select().from(attendances).where(eq(attendances.id, id));
+  const attendance = result[0];
+
+  if (!attendance) {
+    throw new Error("Attendance not found");
+  }
+
+  // Atualizar status
+  await db.update(attendances).set({ status }).where(eq(attendances.id, id));
+
+  // Enviar notificacao WhatsApp se habilitado e telefone disponivel
+  if (sendWhatsApp && attendance.customerPhone) {
+    try {
+      await sendStatusNotification(
+        attendance.customerPhone,
+        status,
+        attendance.licensePlate,
+        attendance.customerName || undefined
+      );
+
+      // Marcar que notificacao foi enviada
+      await db.update(attendances).set({ whatsappNotificationSent: status }).where(eq(attendances.id, id));
+    } catch (error) {
+      console.error("[WhatsApp] Erro ao enviar notificacao:", error);
+      // Nao falha a operacao se WhatsApp falhar
+    }
+  }
 }
