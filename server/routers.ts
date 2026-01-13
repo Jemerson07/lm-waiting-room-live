@@ -31,6 +31,7 @@ export const appRouter = router({
           vehicleModel: z.string(),
           serviceType: z.enum(["tire", "corrective", "preventive"]),
           customerName: z.string().optional(),
+          customerPhone: z.string().optional(),
           description: z.string().optional(),
         })
       )
@@ -42,10 +43,11 @@ export const appRouter = router({
         z.object({
           id: z.number(),
           status: z.enum(["arrival", "waiting", "in_service", "completed"]),
+          sendWhatsApp: z.boolean().optional().default(true),
         })
       )
       .mutation(async ({ input }) => {
-        await db.updateAttendanceStatus(input.id, input.status);
+        await db.updateAttendanceStatusWithWhatsApp(input.id, input.status, input.sendWhatsApp);
         return { success: true };
       }),
     delete: publicProcedure

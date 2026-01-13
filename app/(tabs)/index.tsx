@@ -48,6 +48,7 @@ export default function AdminScreen() {
   const [vehicleModel, setVehicleModel] = useState("");
   const [serviceType, setServiceType] = useState<"tire" | "corrective" | "preventive">("preventive");
   const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<AttendanceStatus | "all">("all");
@@ -75,6 +76,7 @@ export default function AdminScreen() {
         vehicleModel,
         serviceType,
         customerName: customerName.trim() || undefined,
+        customerPhone: customerPhone.trim() || undefined,
         description: description.trim() || undefined,
       });
 
@@ -437,6 +439,21 @@ export default function AdminScreen() {
               </View>
 
               <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>Telefone do Cliente (WhatsApp)</ThemedText>
+                <TextInput
+                  style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
+                  value={customerPhone}
+                  onChangeText={setCustomerPhone}
+                  placeholder="(11) 99999-9999"
+                  placeholderTextColor="#999"
+                  keyboardType="phone-pad"
+                />
+                <ThemedText style={styles.helperText}>
+                  Deixe em branco para não enviar notificações via WhatsApp
+                </ThemedText>
+              </View>
+
+              <View style={styles.formGroup}>
                 <ThemedText style={styles.label}>Descrição</ThemedText>
                 <TextInput
                   style={[
@@ -667,6 +684,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
+  },
+  helperText: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 6,
   },
   textArea: {
     minHeight: 100,

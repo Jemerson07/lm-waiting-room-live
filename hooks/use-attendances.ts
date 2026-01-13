@@ -38,6 +38,7 @@ export function useAttendances() {
       vehicleModel: string;
       serviceType: "tire" | "corrective" | "preventive";
       customerName?: string;
+      customerPhone?: string;
       description?: string;
     }) => {
       await createMutation.mutateAsync(data);
@@ -72,6 +73,7 @@ export function useAttendances() {
     licensePlate: att.licensePlate,
     vehicleModel: att.vehicleModel,
     customerName: att.customerName ?? undefined,
+    customerPhone: att.customerPhone ?? undefined,
     status: att.status as AttendanceStatus,
     serviceType: att.serviceType as "tire" | "corrective" | "preventive",
     description: att.description ?? undefined,

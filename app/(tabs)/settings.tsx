@@ -246,12 +246,12 @@ export default function SettingsScreen() {
 
           <View style={[styles.infoBox, { backgroundColor: "rgba(0, 82, 163, 0.05)" }]}>
             <ThemedText style={styles.infoText}>
-              ud83dudcf1 WhatsApp: Notificau00e7u00f5es automu00e1ticas seru00e3o enviadas aos clientes quando o status do veu00edculo mudar, desde que o nu00famero de telefone seja fornecido no formulário de atendimento.
+              📱 WhatsApp: Notificações automáticas serão enviadas aos clientes quando o status do veículo mudar, desde que o número de telefone seja fornecido no formulário de atendimento.
             </ThemedText>
           </View>
         </View>
 
-        {/* Seu00e7u00e3o: Sistema */}     <View style={[styles.section, { backgroundColor: cardBackground }]}>
+        {/* Seção: Sistema */}     <View style={[styles.section, { backgroundColor: cardBackground }]}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>
             ⚙️ Sistema
           </ThemedText>
