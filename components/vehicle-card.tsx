@@ -1,4 +1,4 @@
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, Dimensions } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -93,6 +93,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+    minHeight: Dimensions.get("window").width > 768 ? 140 : 120,
   },
   cardContent: {
     padding: 20,
@@ -104,7 +105,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   licensePlate: {
-    fontSize: 24,
+    fontSize: Dimensions.get("window").width > 768 ? 28 : 24,
     fontWeight: "bold",
   },
   statusBadge: {
@@ -118,7 +119,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   vehicleModel: {
-    fontSize: 18,
+    fontSize: Dimensions.get("window").width > 768 ? 20 : 18,
     color: "#11181C",
     marginBottom: 8,
   },

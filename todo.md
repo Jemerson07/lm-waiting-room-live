@@ -80,3 +80,14 @@
 - [x] Adicionar controles nas configurações (ativar/desativar)
 - [x] Criar templates de mensagens personalizáveis
 - [x] Testar envio de mensagens
+
+
+## Correções e Otimizações para Desktop/TV
+
+- [x] Corrigir erros de instalação e dependências
+- [x] Criar modo TV com layout landscape
+- [x] Remover barra de navegação em modo TV
+- [x] Otimizar fonte e tamanho de elementos para TV
+- [x] Criar interface responsiva para desktop
+- [x] Adicionar suporte a tela cheia (fullscreen)
+- [x] Testar em desktop e TV

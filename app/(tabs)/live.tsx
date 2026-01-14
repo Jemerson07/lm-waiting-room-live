@@ -152,7 +152,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 0,
+    paddingHorizontal: SCREEN_WIDTH > 768 ? 40 : 0,
+    maxWidth: SCREEN_WIDTH > 1024 ? 1200 : "100%",
+    alignSelf: "center",
+    width: "100%",
   },
   header: {
     alignItems: "center",
@@ -176,7 +179,7 @@ const styles = StyleSheet.create({
     fontSize: 48,
   },
   companyName: {
-    fontSize: 36,
+    fontSize: SCREEN_WIDTH > 768 ? 48 : 36,
     fontWeight: "bold",
     color: "#FFFFFF",
     textAlign: "center",
@@ -211,7 +214,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: SCREEN_WIDTH > 768 ? 32 : 24,
     fontWeight: "bold",
     color: "#FFFFFF",
     marginRight: 12,
