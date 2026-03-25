@@ -13,6 +13,14 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { useAttendances } from "@/hooks/use-attendances";
 import type { AttendanceStatus } from "@/types/attendance";
 import { STATUS_LABELS, SERVICE_TYPE_LABELS } from "@/types/attendance";
+import {
+  exportAttendancesToCSV,
+  exportProductivityReportToCSV,
+  exportServiceTypeReportToCSV,
+  downloadCSV,
+  generateFilename,
+} from "@/lib/csv-export";
+import { Alert, Pressable } from "react-native";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -32,6 +40,39 @@ export default function AnalyticsScreen() {
 
   const { attendances, loading } = useAttendances();
   const [metrics, setMetrics] = useState<MetricCard[]>([]);
+
+  const handleExportAttendances = async () => {
+    try {
+      const csv = exportAttendancesToCSV(attendances);
+      const filename = generateFilename("atendimentos");
+      await downloadCSV(csv, filename);
+      Alert.alert("Sucesso", "Relatório de atendimentos exportado com sucesso!");
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível exportar o relatório");
+    }
+  };
+
+  const handleExportProductivity = async () => {
+    try {
+      const csv = exportProductivityReportToCSV(attendances);
+      const filename = generateFilename("produtividade");
+      await downloadCSV(csv, filename);
+      Alert.alert("Sucesso", "Relatório de produtividade exportado com sucesso!");
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível exportar o relatório");
+    }
+  };
+
+  const handleExportServiceType = async () => {
+    try {
+      const csv = exportServiceTypeReportToCSV(attendances);
+      const filename = generateFilename("servicos");
+      await downloadCSV(csv, filename);
+      Alert.alert("Sucesso", "Relatório de serviços exportado com sucesso!");
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível exportar o relatório");
+    }
+  };
 
   useEffect(() => {
     calculateMetrics();
@@ -183,6 +224,33 @@ export default function AnalyticsScreen() {
               )}
             </View>
           ))}
+        </View>
+
+        {/* Botões de Exportação */}
+        <View style={styles.exportSection}>
+          <ThemedText type="subtitle" style={styles.exportTitle}>
+            📥 Exportar Relatórios
+          </ThemedText>
+          <View style={styles.exportButtons}>
+            <Pressable
+              style={[styles.exportButton, { backgroundColor: tintColor }]}
+              onPress={handleExportAttendances}
+            >
+              <ThemedText style={styles.exportButtonText}>Atendimentos</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.exportButton, { backgroundColor: tintColor }]}
+              onPress={handleExportProductivity}
+            >
+              <ThemedText style={styles.exportButtonText}>Produtividade</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.exportButton, { backgroundColor: tintColor }]}
+              onPress={handleExportServiceType}
+            >
+              <ThemedText style={styles.exportButtonText}>Serviços</ThemedText>
+            </Pressable>
+          </View>
         </View>
 
         {/* Resumo */}
@@ -385,5 +453,34 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  exportSection: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    backgroundColor: "rgba(0, 82, 163, 0.05)",
+  },
+  exportTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 16,
+  },
+  exportButtons: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  exportButton: {
+    flex: 1,
+    minWidth: 100,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  exportButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

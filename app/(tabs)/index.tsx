@@ -27,6 +27,7 @@ import {
   getElapsedTime,
 } from "@/types/attendance";
 import { Colors } from "@/constants/theme";
+import { searchVehicleModels } from "@/lib/vehicle-models";
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();
@@ -52,6 +53,8 @@ export default function AdminScreen() {
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<AttendanceStatus | "all">("all");
+  const [vehicleModelSuggestions, setVehicleModelSuggestions] = useState<string[]>([]);
+  const [showModelSuggestions, setShowModelSuggestions] = useState(false);
 
   const handleCreateAttendance = async () => {
     if (!licensePlate.trim()) {
@@ -68,6 +71,8 @@ export default function AdminScreen() {
       Alert.alert("Erro", "Por favor, informe o modelo do veículo");
       return;
     }
+
+    setShowModelSuggestions(false);
 
     try {
       setSubmitting(true);
@@ -379,10 +384,41 @@ export default function AdminScreen() {
                 <TextInput
                   style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
                   value={vehicleModel}
-                  onChangeText={setVehicleModel}
+                  onChangeText={(text) => {
+                    setVehicleModel(text);
+                    if (text.trim()) {
+                      setVehicleModelSuggestions(searchVehicleModels(text));
+                      setShowModelSuggestions(true);
+                    } else {
+                      setShowModelSuggestions(false);
+                    }
+                  }}
+                  onFocus={() => {
+                    if (vehicleModel.trim()) {
+                      setShowModelSuggestions(true);
+                    }
+                  }}
                   placeholder="Ex: VW Nivus Highline"
                   placeholderTextColor="#999"
                 />
+                {showModelSuggestions && vehicleModelSuggestions.length > 0 && (
+                  <View style={[styles.suggestionsContainer, { backgroundColor: cardBackground, borderColor }]}>
+                    <ScrollView style={styles.suggestionsList} nestedScrollEnabled>
+                      {vehicleModelSuggestions.map((model, index) => (
+                        <Pressable
+                          key={index}
+                          style={styles.suggestionItem}
+                          onPress={() => {
+                            setVehicleModel(model);
+                            setShowModelSuggestions(false);
+                          }}
+                        >
+                          <ThemedText style={styles.suggestionText}>{model}</ThemedText>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
 
               <View style={styles.formGroup}>
@@ -742,5 +778,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#0066CC",
+  },
+  suggestionsContainer: {
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    maxHeight: 200,
+    marginTop: -8,
+    marginHorizontal: -1,
+  },
+  suggestionsList: {
+    maxHeight: 200,
+  },
+  suggestionItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0, 0, 0, 0.05)",
+  },
+  suggestionText: {
+    fontSize: 14,
   },
 });

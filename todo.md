@@ -91,3 +91,13 @@
 - [x] Criar interface responsiva para desktop
 - [x] Adicionar suporte a tela cheia (fullscreen)
 - [x] Testar em desktop e TV
+
+
+## 🆕 Novas Funcionalidades (Sprint 2)
+
+- [x] Tela Live para TV (URL separada, sem Admin)
+- [x] Exportar Relatórios em CSV (3 tipos: Atendimentos, Produtividade, Serviços)
+- [x] Busca de Modelos de Veículo com Autocomplete (150+ modelos populares)
+- [x] Botões de exportação na página de Relatórios
+- [x] Suporte a múltiplos formatos de data/hora
+- [x] Validação de tipos TypeScript
