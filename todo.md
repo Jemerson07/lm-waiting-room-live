@@ -101,3 +101,15 @@
 - [x] Botões de exportação na página de Relatórios
 - [x] Suporte a múltiplos formatos de data/hora
 - [x] Validação de tipos TypeScript
+
+
+## 🆕 Sprint 3 - Desktop/Web + Melhorias TV
+
+- [x] Configurar deploy desktop/web simples
+- [x] Notificações de conclusão na TV ("O veículo do [cliente] foi concluído")
+- [x] Remover atendimentos finalizados da tela Live
+- [x] Máximo 30 atendimentos na tela TV
+- [x] Indicador de atendimentos ocultos (nuvem com número)
+- [x] Ordenar atendimentos por data de criação
+- [x] Melhorias de UX e responsividade
+- [x] Testes completos

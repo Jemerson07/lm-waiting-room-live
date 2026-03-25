@@ -57,6 +57,7 @@ export default function AdminScreen() {
   const [showModelSuggestions, setShowModelSuggestions] = useState(false);
 
   const handleCreateAttendance = async () => {
+    // Validar placa
     if (!licensePlate.trim()) {
       Alert.alert("Erro", "Por favor, informe a placa do veículo");
       return;
@@ -67,8 +68,15 @@ export default function AdminScreen() {
       return;
     }
 
+    // Validar modelo
     if (!vehicleModel.trim()) {
       Alert.alert("Erro", "Por favor, informe o modelo do veículo");
+      return;
+    }
+
+    // Validar telefone (se fornecido)
+    if (customerPhone.trim() && !/^\d{10,15}$/.test(customerPhone.replace(/\D/g, ""))) {
+      Alert.alert("Erro", "Telefone inválido. Use apenas números (10-15 dígitos)");
       return;
     }
 
@@ -88,14 +96,25 @@ export default function AdminScreen() {
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
+      
+      // Mostrar mensagem de sucesso
+      Alert.alert(
+        "Sucesso!",
+        `Atendimento criado para ${formatLicensePlate(licensePlate)}`,
+        [{ text: "OK", onPress: () => {} }]
+      );
+      
       setShowNewModal(false);
       setLicensePlate("");
       setVehicleModel("");
       setServiceType("preventive");
       setCustomerName("");
+      setCustomerPhone("");
       setDescription("");
+      setVehicleModelSuggestions([]);
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível criar o atendimento");
+      console.error("Erro ao criar atendimento:", error);
+      Alert.alert("Erro", "Não foi possível criar o atendimento. Tente novamente.");
     } finally {
       setSubmitting(false);
     }
@@ -106,9 +125,9 @@ export default function AdminScreen() {
     if (!nextStatus) {
       Alert.alert(
         "Atendimento Finalizado",
-        "Este atendimento já está finalizado. Deseja removê-lo?",
+        `O atendimento de ${attendance.licensePlate} foi concluído. Deseja removê-lo?`,
         [
-          { text: "Cancelar", style: "cancel" },
+          { text: "Manter", style: "cancel" },
           {
             text: "Remover",
             style: "destructive",
@@ -306,7 +325,7 @@ export default function AdminScreen() {
                           "Remover Atendimento",
                           `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`,
                           [
-                            { text: "Cancelar", style: "cancel" },
+                            { text: "Manter", style: "cancel" },
                             {
                               text: "Remover",
                               style: "destructive",

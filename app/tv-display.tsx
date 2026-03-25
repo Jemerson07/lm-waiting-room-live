@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { View, ScrollView, StyleSheet, Dimensions, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
@@ -6,15 +6,23 @@ import { useAttendances } from "@/hooks/use-attendances";
 import { useCompanySettings } from "@/hooks/use-company-settings";
 import { NivusBackground } from "@/components/nivus-background";
 import { STATUS_LABELS, SERVICE_TYPE_LABELS, SERVICE_TYPE_ICONS } from "@/types/attendance";
+import { CompletionNotification } from "@/components/completion-notification";
+import { HiddenCountBadge } from "@/components/hidden-count-badge";
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming } from "react-native-reanimated";
 
 const { width, height } = Dimensions.get("window");
+const MAX_VISIBLE_ATTENDANCES = 30;
 
 export default function TVDisplayScreen() {
   const insets = useSafeAreaInsets();
   const { attendances, loading } = useAttendances();
   const { settings: { companyName } } = useCompanySettings();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [completionNotification, setCompletionNotification] = useState<{
+    customerName: string;
+    licensePlate: string;
+  } | null>(null);
+  const [previousCompletedCount, setPreviousCompletedCount] = useState(0);
 
   // Atualizar hora a cada segundo
   useEffect(() => {
@@ -24,13 +32,58 @@ export default function TVDisplayScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // Agrupar atendimentos por status
-  const groupedByStatus = {
-    arrival: attendances.filter((a) => a.status === "arrival"),
-    waiting: attendances.filter((a) => a.status === "waiting"),
-    in_service: attendances.filter((a) => a.status === "in_service"),
-    completed: attendances.filter((a) => a.status === "completed"),
+  // Detectar quando um atendimento é finalizado
+  useEffect(() => {
+    const completedCount = attendances.filter((a) => a.status === "completed").length;
+    
+    if (completedCount > previousCompletedCount) {
+      // Encontrar o atendimento que foi finalizado recentemente
+      const recentlyCompleted = attendances.find(
+        (a) => a.status === "completed" && 
+        new Date(a.updatedAt).getTime() > Date.now() - 5000
+      );
+      
+      if (recentlyCompleted) {
+        setCompletionNotification({
+          customerName: recentlyCompleted.customerName || "Cliente",
+          licensePlate: recentlyCompleted.licensePlate,
+        });
+      }
+    }
+    
+    setPreviousCompletedCount(completedCount);
+  }, [attendances, previousCompletedCount]);
+
+  // Ordenar atendimentos por data de criação (mais antigos primeiro)
+  const sortByCreatedDate = (items: any[]) => {
+    return [...items].sort((a, b) => 
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
   };
+
+  // Agrupar atendimentos por status (excluindo finalizados da tela)
+  const groupedByStatus = {
+    arrival: sortByCreatedDate(attendances.filter((a) => a.status === "arrival")),
+    waiting: sortByCreatedDate(attendances.filter((a) => a.status === "waiting")),
+    in_service: sortByCreatedDate(attendances.filter((a) => a.status === "in_service")),
+  };
+
+  // Calcular total de atendimentos visíveis e ocultos
+  const totalVisible = groupedByStatus.arrival.length + 
+                      groupedByStatus.waiting.length + 
+                      groupedByStatus.in_service.length;
+  const totalHidden = Math.max(0, totalVisible - MAX_VISIBLE_ATTENDANCES);
+  
+  // Limitar atendimentos visíveis
+  const limitedArrival = groupedByStatus.arrival.slice(0, MAX_VISIBLE_ATTENDANCES);
+  const limitedWaiting = groupedByStatus.waiting.slice(
+    0, 
+    Math.max(0, MAX_VISIBLE_ATTENDANCES - limitedArrival.length)
+  );
+  const limitedInService = groupedByStatus.in_service.slice(
+    0,
+    Math.max(0, MAX_VISIBLE_ATTENDANCES - limitedArrival.length - limitedWaiting.length)
+  );
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString("pt-BR", {
@@ -42,107 +95,106 @@ export default function TVDisplayScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <NivusBackground />
       <View style={styles.overlay}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerContent}>
-              <ThemedText style={styles.companyName}>{companyName || "LM Soluções"}</ThemedText>
-              <ThemedText style={styles.subtitle}>Sistema de Sala de Espera</ThemedText>
-            </View>
-            <ThemedText style={styles.time}>{formatTime(currentTime)}</ThemedText>
+        {/* Notificação de Conclusão */}
+        {completionNotification && (
+          <CompletionNotification
+            customerName={completionNotification.customerName}
+            licensePlate={completionNotification.licensePlate}
+            isVisible={!!completionNotification}
+            onHide={() => setCompletionNotification(null)}
+          />
+        )}
+
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <ThemedText style={styles.companyName}>{companyName || "LM Soluções"}</ThemedText>
+            <ThemedText style={styles.subtitle}>Sistema de Sala de Espera</ThemedText>
           </View>
-
-          {/* Conteúdo Principal */}
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            style={styles.scrollView}
-          >
-            {/* Seção: Chegada */}
-            <View style={styles.section}>
-              <View style={[styles.sectionHeader, { backgroundColor: "#FF6B6B" }]}>
-                <ThemedText style={styles.sectionTitle}>🚗 Chegada</ThemedText>
-                <ThemedText style={styles.sectionCount}>{groupedByStatus.arrival.length}</ThemedText>
-              </View>
-              <ScrollView style={styles.cardsContainer}>
-                {groupedByStatus.arrival.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <ThemedText style={styles.emptyText}>Nenhum veículo</ThemedText>
-                  </View>
-                ) : (
-                  groupedByStatus.arrival.map((att) => (
-                    <TVCard key={att.id} attendance={att} />
-                  ))
-                )}
-              </ScrollView>
-            </View>
-
-            {/* Seção: Fila */}
-            <View style={styles.section}>
-              <View style={[styles.sectionHeader, { backgroundColor: "#FFA500" }]}>
-                <ThemedText style={styles.sectionTitle}>⏳ Fila de Espera</ThemedText>
-                <ThemedText style={styles.sectionCount}>{groupedByStatus.waiting.length}</ThemedText>
-              </View>
-              <ScrollView style={styles.cardsContainer}>
-                {groupedByStatus.waiting.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <ThemedText style={styles.emptyText}>Nenhum veículo</ThemedText>
-                  </View>
-                ) : (
-                  groupedByStatus.waiting.map((att) => (
-                    <TVCard key={att.id} attendance={att} />
-                  ))
-                )}
-              </ScrollView>
-            </View>
-
-            {/* Seção: Em Atendimento */}
-            <View style={styles.section}>
-              <View style={[styles.sectionHeader, { backgroundColor: "#4ECDC4" }]}>
-                <ThemedText style={styles.sectionTitle}>🔧 Em Atendimento</ThemedText>
-                <ThemedText style={styles.sectionCount}>{groupedByStatus.in_service.length}</ThemedText>
-              </View>
-              <ScrollView style={styles.cardsContainer}>
-                {groupedByStatus.in_service.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <ThemedText style={styles.emptyText}>Nenhum veículo</ThemedText>
-                  </View>
-                ) : (
-                  groupedByStatus.in_service.map((att) => (
-                    <TVCard key={att.id} attendance={att} pulse />
-                  ))
-                )}
-              </ScrollView>
-            </View>
-
-            {/* Seção: Concluído */}
-            <View style={styles.section}>
-              <View style={[styles.sectionHeader, { backgroundColor: "#51CF66" }]}>
-                <ThemedText style={styles.sectionTitle}>✅ Concluído</ThemedText>
-                <ThemedText style={styles.sectionCount}>{groupedByStatus.completed.length}</ThemedText>
-              </View>
-              <ScrollView style={styles.cardsContainer}>
-                {groupedByStatus.completed.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <ThemedText style={styles.emptyText}>Nenhum veículo</ThemedText>
-                  </View>
-                ) : (
-                  groupedByStatus.completed.map((att) => (
-                    <TVCard key={att.id} attendance={att} />
-                  ))
-                )}
-              </ScrollView>
-            </View>
-          </ScrollView>
-
-          {/* Footer */}
-          <View style={styles.footer}>
-            <ThemedText style={styles.footerText}>
-              Total de Atendimentos: {attendances.length}
-            </ThemedText>
-          </View>
+          <ThemedText style={styles.time}>{formatTime(currentTime)}</ThemedText>
         </View>
+
+        {/* Conteúdo Principal */}
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          style={styles.scrollView}
+        >
+          {/* Seção: Chegada */}
+          <View style={styles.section}>
+            <View style={[styles.sectionHeader, { backgroundColor: "#FF6B6B" }]}>
+              <ThemedText style={styles.sectionTitle}>🚗 Chegada</ThemedText>
+              <ThemedText style={styles.sectionCount}>{limitedArrival.length}</ThemedText>
+            </View>
+            <ScrollView style={styles.cardsContainer}>
+              {limitedArrival.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <ThemedText style={styles.emptyText}>Nenhum veículo</ThemedText>
+                </View>
+              ) : (
+                limitedArrival.map((att) => (
+                  <TVCard key={att.id} attendance={att} />
+                ))
+              )}
+            </ScrollView>
+          </View>
+
+          {/* Seção: Fila */}
+          <View style={styles.section}>
+            <View style={[styles.sectionHeader, { backgroundColor: "#FFA500" }]}>
+              <ThemedText style={styles.sectionTitle}>⏳ Fila de Espera</ThemedText>
+              <ThemedText style={styles.sectionCount}>{limitedWaiting.length}</ThemedText>
+            </View>
+            <ScrollView style={styles.cardsContainer}>
+              {limitedWaiting.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <ThemedText style={styles.emptyText}>Nenhum veículo</ThemedText>
+                </View>
+              ) : (
+                limitedWaiting.map((att) => (
+                  <TVCard key={att.id} attendance={att} />
+                ))
+              )}
+            </ScrollView>
+          </View>
+
+          {/* Seção: Em Atendimento */}
+          <View style={styles.section}>
+            <View style={[styles.sectionHeader, { backgroundColor: "#4ECDC4" }]}>
+              <ThemedText style={styles.sectionTitle}>🔧 Em Atendimento</ThemedText>
+              <ThemedText style={styles.sectionCount}>{limitedInService.length}</ThemedText>
+            </View>
+            <ScrollView style={styles.cardsContainer}>
+              {limitedInService.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <ThemedText style={styles.emptyText}>Nenhum veículo</ThemedText>
+                </View>
+              ) : (
+                limitedInService.map((att) => (
+                  <TVCard key={att.id} attendance={att} pulse />
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </ScrollView>
+
+        {/* Indicador de Ocultos */}
+        {totalHidden > 0 && (
+          <View style={styles.hiddenIndicator}>
+            <HiddenCountBadge count={totalHidden} />
+          </View>
+        )}
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <ThemedText style={styles.footerText}>
+            Atendimentos: {totalVisible} visíveis {totalHidden > 0 ? `+ ${totalHidden} ocultos` : ""}
+          </ThemedText>
+        </View>
+      </View>
     </View>
   );
 }
@@ -250,13 +302,13 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   sectionCount: {
-    fontSize: 48,
+    fontSize: 32,
     fontWeight: "bold",
     color: "#FFFFFF",
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
   cardsContainer: {
     flex: 1,
@@ -268,50 +320,57 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyText: {
-    fontSize: 28,
+    fontSize: 24,
     color: "#FFFFFF",
-    opacity: 0.6,
+    opacity: 0.5,
   },
   tvCard: {
     backgroundColor: "rgba(255, 255, 255, 0.95)",
     borderRadius: 16,
-    padding: 30,
-    marginBottom: 24,
-    borderLeftWidth: 8,
-    borderLeftColor: "#0052A3",
+    padding: 24,
+    marginBottom: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
     elevation: 8,
   },
   tvCardContent: {
-    gap: 16,
+    gap: 12,
   },
   tvLicensePlate: {
-    fontSize: 44,
+    fontSize: 36,
     fontWeight: "bold",
     color: "#0052A3",
+    letterSpacing: 2,
   },
   tvVehicleModel: {
-    fontSize: 28,
+    fontSize: 24,
     color: "#333",
+    fontWeight: "600",
   },
   tvServiceBadge: {
-    backgroundColor: "#0052A3",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: "#E8F4F8",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
     alignSelf: "flex-start",
   },
   tvServiceText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#0052A3",
   },
   tvCustomerName: {
-    fontSize: 24,
+    fontSize: 18,
     color: "#666",
+    fontWeight: "500",
+  },
+  hiddenIndicator: {
+    position: "absolute",
+    bottom: 100,
+    right: 40,
+    zIndex: 100,
   },
   footer: {
     paddingHorizontal: 40,
@@ -321,8 +380,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   footerText: {
-    fontSize: 24,
-    color: "#FFFFFF",
-    textAlign: "center",
+    fontSize: 18,
+    color: "#B0C4DE",
+    fontWeight: "600",
   },
 });
