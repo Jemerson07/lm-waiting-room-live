@@ -221,3 +221,38 @@
 - [x] Testar com zoom
 - [x] Testar com diferentes DPIs
 - [x] Validar acessibilidade
+
+
+## 🔧 Sprint 6 - Correções e Melhorias Críticas
+
+### Conexão com TV
+- [x] Implementar WebSocket para conexão simples
+- [x] Criar URL única para acessar TV
+- [x] Testar conexão em múltiplas TVs
+- [x] Adicionar indicador de conexão
+- [x] Criar guia passo a passo funcional
+
+### Relatório com Filtros de Data/Hora
+- [x] Adicionar seletor de data inicial
+- [x] Adicionar seletor de data final
+- [x] Adicionar seletor de hora inicial
+- [x] Adicionar seletor de hora final
+- [x] Filtrar atendimentos por período
+- [x] Exibir total de dias e horas
+- [x] Testar filtros com dados reais
+
+### Remover Atendimentos Finalizados da Live
+- [x] Verificar status "Finalizada" em tempo real
+- [x] Remover atendimento da tela quando finalizar
+- [x] Manter notificação de conclusão
+- [x] Testar com múltiplos atendimentos
+- [x] Validar em diferentes tamanhos de tela
+
+### Testes Completos
+- [x] Testar conexão com TV
+- [x] Testar filtros de relatório
+- [x] Testar remoção de atendimentos
+- [x] Testar em múltiplos navegadores
+- [x] Testar em múltiplos dispositivos
+- [x] Validar performance
+- [x] Corrigir bugs encontrados

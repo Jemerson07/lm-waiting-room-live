@@ -67,6 +67,9 @@ export default function TVDisplayScreen() {
     waiting: sortByCreatedDate(attendances.filter((a) => a.status === "waiting")),
     in_service: sortByCreatedDate(attendances.filter((a) => a.status === "in_service")),
   };
+  
+  // Filtrar atendimentos finalizados (não aparecem na tela Live)
+  const completedAttendances = attendances.filter((a) => a.status === "completed");
 
   // Calcular total de atendimentos visíveis e ocultos
   const totalVisible = groupedByStatus.arrival.length + 
@@ -191,7 +194,7 @@ export default function TVDisplayScreen() {
         {/* Footer */}
         <View style={styles.footer}>
           <ThemedText style={styles.footerText}>
-            Atendimentos: {totalVisible} visíveis {totalHidden > 0 ? `+ ${totalHidden} ocultos` : ""}
+            Visíveis: {totalVisible} | Ocultos: {totalHidden} | Finalizados: {completedAttendances.length}
           </ThemedText>
         </View>
       </View>

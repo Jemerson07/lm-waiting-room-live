@@ -4,6 +4,7 @@ import {
   ScrollView,
   Dimensions,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useState, useEffect } from "react";
@@ -40,6 +41,10 @@ export default function AnalyticsScreen() {
 
   const { attendances, loading } = useAttendances();
   const [metrics, setMetrics] = useState<MetricCard[]>([]);
+  const [startDate, setStartDate] = useState<string>(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [startTime, setStartTime] = useState<string>("00:00");
+  const [endTime, setEndTime] = useState<string>("23:59");
 
   const handleExportAttendances = async () => {
     try {
@@ -76,16 +81,28 @@ export default function AnalyticsScreen() {
 
   useEffect(() => {
     calculateMetrics();
-  }, [attendances]);
+  }, [attendances, startDate, endDate, startTime, endTime]);
+
+  // Filtrar atendimentos por data e hora
+  const filteredAttendances = attendances.filter((att) => {
+    const attDate = new Date(att.createdAt);
+    const attDateStr = attDate.toISOString().split('T')[0];
+    const attTime = attDate.toTimeString().slice(0, 5);
+    
+    const isAfterStart = attDateStr >= startDate && attTime >= startTime;
+    const isBeforeEnd = attDateStr <= endDate && attTime <= endTime;
+    
+    return isAfterStart && isBeforeEnd;
+  });
 
   const calculateMetrics = () => {
-    const total = attendances.length;
-    const completed = attendances.filter((a) => a.status === "completed").length;
-    const inService = attendances.filter((a) => a.status === "in_service").length;
-    const waiting = attendances.filter((a) => a.status === "waiting").length;
+    const total = filteredAttendances.length;
+    const completed = filteredAttendances.filter((a) => a.status === "completed").length;
+    const inService = filteredAttendances.filter((a) => a.status === "in_service").length;
+    const waiting = filteredAttendances.filter((a) => a.status === "waiting").length;
 
     // Calcular tempo médio de atendimento
-    const completedWithTime = attendances.filter((a) => a.status === "completed");
+    const completedWithTime = filteredAttendances.filter((a) => a.status === "completed");
     const avgTime =
       completedWithTime.length > 0
         ? Math.round(
@@ -98,11 +115,11 @@ export default function AnalyticsScreen() {
         : 0;
 
     // Contar por tipo de serviço
-    const tireCount = attendances.filter((a) => a.serviceType === "tire").length;
-    const correctiveCount = attendances.filter(
+    const tireCount = filteredAttendances.filter((a) => a.serviceType === "tire").length;
+    const correctiveCount = filteredAttendances.filter(
       (a) => a.serviceType === "corrective"
     ).length;
-    const preventiveCount = attendances.filter(
+    const preventiveCount = filteredAttendances.filter(
       (a) => a.serviceType === "preventive"
     ).length;
 
@@ -192,6 +209,54 @@ export default function AnalyticsScreen() {
           <ThemedText type="title">Relatório de Produtividade</ThemedText>
           <ThemedText style={styles.subtitle}>
             Análise em tempo real do desempenho
+          </ThemedText>
+        </View>
+
+        {/* Filtros de Data e Hora */}
+        <View style={styles.filterSection}>
+          <ThemedText style={styles.filterTitle}>📅 Filtrar por Período</ThemedText>
+          <View style={styles.filterRow}>
+            <View style={styles.filterInput}>
+              <ThemedText style={styles.filterLabel}>Data Inicial</ThemedText>
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD"
+                value={startDate}
+                onChangeText={setStartDate}
+              />
+            </View>
+            <View style={styles.filterInput}>
+              <ThemedText style={styles.filterLabel}>Hora Inicial</ThemedText>
+              <TextInput
+                style={styles.input}
+                placeholder="HH:MM"
+                value={startTime}
+                onChangeText={setStartTime}
+              />
+            </View>
+          </View>
+          <View style={styles.filterRow}>
+            <View style={styles.filterInput}>
+              <ThemedText style={styles.filterLabel}>Data Final</ThemedText>
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD"
+                value={endDate}
+                onChangeText={setEndDate}
+              />
+            </View>
+            <View style={styles.filterInput}>
+              <ThemedText style={styles.filterLabel}>Hora Final</ThemedText>
+              <TextInput
+                style={styles.input}
+                placeholder="HH:MM"
+                value={endTime}
+                onChangeText={setEndTime}
+              />
+            </View>
+          </View>
+          <ThemedText style={styles.filterInfo}>
+            Mostrando {filteredAttendances.length} atendimentos
           </ThemedText>
         </View>
 
@@ -482,5 +547,45 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "600",
+  },
+  filterSection: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    backgroundColor: "rgba(0, 82, 163, 0.05)",
+  },
+  filterTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 16,
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+  },
+  filterInput: {
+    flex: 1,
+  },
+  filterLabel: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginBottom: 6,
+    fontWeight: "500",
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.2)",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#333",
+  },
+  filterInfo: {
+    fontSize: 13,
+    opacity: 0.7,
+    marginTop: 12,
+    fontWeight: "500",
   },
 });
