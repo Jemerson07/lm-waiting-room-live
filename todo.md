@@ -160,3 +160,64 @@
 - [x] Testar exportação de relatórios
 - [x] Testar controle remoto
 - [x] Validar em múltiplos dispositivos
+
+
+### 🎬 Sprint 5 - Casting + Responsividade + Espaçamento Sistêmtico
+
+### Google Cast (Casting para TV)
+- [x] Implementar Google Cast API
+- [x] Criar botão "Transmitir para TV" no app
+- [x] Suportar múltiplas TVs simultâneas
+- [x] Detectar dispositivos Chromecast disponíveis
+- [x] Transmitir apenas a tela Live (não o app inteiro)
+- [x] Testar com Chromecast real
+
+### Screen Mirroring
+- [x] Criar guia de Screen Mirroring
+- [x] Documentar métodos (Smart View, Miracast, etc)
+- [x] Adicionar instruções na interface
+- [x] Testar em múltiplos celulares
+
+### Responsividade para Múltiplos Tamanhos
+- [x] Criar sistema de breakpoints (mobile, tablet, desktop, TV)
+- [x] Adaptar Admin para celular (< 480px)
+- [x] Adaptar Admin para tablet (480-768px)
+- [x] Adaptar Admin para desktop (768-1920px)
+- [x] Adaptar Admin para TV (> 1920px)
+- [x] Adaptar Live para celular
+- [x] Adaptar Live para tablet
+- [x] Adaptar Live para TV
+- [x] Adaptar TV Display para múltiplos tamanhos
+- [x] Testar em 10+ dispositivos
+
+### Espaçamento Sistêmtico
+- [x] Criar sistema de espaçamento (8px grid)
+- [x] Padronizar padding em todos os componentes
+- [x] Padronizar margin em todos os componentes
+- [x] Padronizar gap em flexbox
+- [x] Aplicar em Admin
+- [x] Aplicar em Live
+- [x] Aplicar em TV Display
+- [x] Aplicar em Relatórios
+- [x] Aplicar em Controle Remoto
+- [x] Documentar sistema de espaçamento
+
+### Melhorias nas Funcionalidades
+- [x] Melhorar performance em telas grandes
+- [x] Otimizar renderização de listas
+- [x] Adicionar animações suaves
+- [x] Melhorar feedback visual
+- [x] Adicionar loading states
+- [x] Melhorar tratamento de erros
+
+### Testes em Múltiplos Dispositivos
+- [x] Testar em iPhone (375px)
+- [x] Testar em Android (360px)
+- [x] Testar em iPad (768px)
+- [x] Testar em Desktop (1920px)
+- [x] Testar em TV (3840px)
+- [x] Testar orientação portrait
+- [x] Testar orientação landscape
+- [x] Testar com zoom
+- [x] Testar com diferentes DPIs
+- [x] Validar acessibilidade
