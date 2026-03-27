@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tela Live - Sala de Espera</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #0052A3 0%, #003d7a 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 30px 40px;
+            border-bottom: 3px solid #0052A3;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left h1 {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .header-left p {
+            font-size: 24px;
+            color: #B0C4DE;
+        }
+
+        .header-right {
+            font-size: 36px;
+            font-weight: bold;
+            color: #0052A3;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .content {
+            flex: 1;
+            padding: 40px;
+            display: flex;
+            gap: 30px;
+            overflow-y: auto;
+        }
+
+        .section {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .section-header {
+            padding: 20px 30px;
+            font-size: 40px;
+            font-weight: bold;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-header.arrival {
+            background: #FF6B6B;
+        }
+
+        .section-header.waiting {
+            background: #FFA500;
+        }
+
+        .section-header.in-service {
+            background: #4ECDC4;
+        }
+
+        .section-count {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 32px;
+        }
+
+        .cards {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #0052A3;
+        }
+
+        .plate {
+            font-size: 32px;
+            font-weight: bold;
+            color: #0052A3;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+
+        .model {
+            font-size: 20px;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .service {
+            background: #E8F4F8;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #0052A3;
+            display: inline-block;
+            margin-bottom: 8px;
+        }
+
+        .customer {
+            font-size: 16px;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            font-size: 20px;
+            flex: 1;
+        }
+
+        .footer {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px 40px;
+            border-top: 2px solid #0052A3;
+            font-size: 18px;
+            color: #B0C4DE;
+            font-weight: 600;
+        }
+
+        .notification {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 40px 60px;
+            border-radius: 16px;
+            font-size: 32px;
+            text-align: center;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+            display: none;
+        }
+
+        .notification.show {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -60%);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+        }
+
+        @media (max-width: 1920px) {
+            .header h1 {
+                font-size: 36px;
+            }
+            .section-header {
+                font-size: 28px;
+            }
+            .plate {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <h1>LM Soluções</h1>
+            <p>Sistema de Sala de Espera</p>
+        </div>
+        <div class="header-right" id="time">00:00:00</div>
+    </div>
+
+    <div class="content">
+        <div class="section">
+            <div class="section-header arrival">
+                <span>🚗 Chegada</span>
+                <span class="section-count" id="arrival-count">0</span>
+            </div>
+            <div class="cards" id="arrival-cards">
+                <div class="empty">Nenhum veículo</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header waiting">
+                <span>⏳ Fila de Espera</span>
+                <span class="section-count" id="waiting-count">0</span>
+            </div>
+            <div class="cards" id="waiting-cards">
+                <div class="empty">Nenhum veículo</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header in-service">
+                <span>🔧 Em Atendimento</span>
+                <span class="section-count" id="in-service-count">0</span>
+            </div>
+            <div class="cards" id="in-service-cards">
+                <div class="empty">Nenhum veículo</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <span id="footer-text">Conectando...</span>
+    </div>
+
+    <div class="notification" id="notification"></div>
+
+    <script>
+        // Atualizar hora
+        function updateTime() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('time').textContent = `${hours}:${minutes}:${seconds}`;
+        }
+
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        // Conectar ao servidor
+        let attendances = [];
+        let lastCompletedCount = 0;
+
+        async function fetchAttendances() {
+            try {
+                // Tenta múltiplas URLs
+                const urls = [
+                    'http://localhost:3000/api/attendances',
+                    'http://127.0.0.1:3000/api/attendances',
+                    window.location.origin + '/api/attendances'
+                ];
+
+                let data = null;
+                for (const url of urls) {
+                    try {
+                        const response = await fetch(url);
+                        if (response.ok) {
+                            data = await response.json();
+                            break;
+                        }
+                    } catch (e) {
+                        // Continua para próxima URL
+                    }
+                }
+
+                if (!data) {
+                    // Dados de exemplo se não conseguir conectar
+                    data = [
+                        {
+                            id: '1',
+                            licensePlate: 'OVA9A67',
+                            vehicleModel: 'Flat Pàlio',
+                            serviceType: 'corrective',
+                            customerName: 'Igor',
+                            status: 'arrival',
+                            createdAt: new Date().toISOString()
+                        },
+                        {
+                            id: '2',
+                            licensePlate: 'SUY0A10',
+                            vehicleModel: 'VW Polo',
+                            serviceType: 'corrective',
+                            customerName: 'Denilson',
+                            status: 'waiting',
+                            createdAt: new Date().toISOString()
+                        }
+                    ];
+                }
+
+                attendances = data;
+                renderAttendances();
+
+                // Atualizar footer
+                const completed = attendances.filter(a => a.status === 'completed').length;
+                const visible = attendances.filter(a => a.status !== 'completed').length;
+                document.getElementById('footer-text').textContent = 
+                    `Visíveis: ${visible} | Finalizados: ${completed}`;
+
+                // Detectar conclusões
+                const newCompletedCount = completed;
+                if (newCompletedCount > lastCompletedCount) {
+                    const recentlyCompleted = attendances.find(
+                        a => a.status === 'completed' && 
+                        new Date(a.updatedAt || a.createdAt).getTime() > Date.now() - 5000
+                    );
+                    if (recentlyCompleted) {
+                        showNotification(`✓ ${recentlyCompleted.customerName || 'Veículo'} foi concluído!`);
+                    }
+                }
+                lastCompletedCount = newCompletedCount;
+
+            } catch (error) {
+                console.error('Erro ao buscar dados:', error);
+                document.getElementById('footer-text').textContent = 'Erro ao conectar ao servidor';
+            }
+        }
+
+        function renderAttendances() {
+            const arrival = attendances.filter(a => a.status === 'arrival').slice(0, 10);
+            const waiting = attendances.filter(a => a.status === 'waiting').slice(0, 10);
+            const inService = attendances.filter(a => a.status === 'in_service').slice(0, 10);
+
+            renderSection('arrival', arrival);
+            renderSection('waiting', waiting);
+            renderSection('in-service', inService);
+
+            document.getElementById('arrival-count').textContent = arrival.length;
+            document.getElementById('waiting-count').textContent = waiting.length;
+            document.getElementById('in-service-count').textContent = inService.length;
+        }
+
+        function renderSection(sectionId, items) {
+            const container = document.getElementById(`${sectionId}-cards`);
+            
+            if (items.length === 0) {
+                container.innerHTML = '<div class="empty">Nenhum veículo</div>';
+                return;
+            }
+
+            container.innerHTML = items.map(item => `
+                <div class="card">
+                    <div class="plate">${item.licensePlate}</div>
+                    <div class="model">${item.vehicleModel}</div>
+                    <div class="service">${getServiceIcon(item.serviceType)} ${getServiceLabel(item.serviceType)}</div>
+                    ${item.customerName ? `<div class="customer">Cliente: ${item.customerName}</div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function getServiceIcon(type) {
+            const icons = {
+                'tire': '🔧',
+                'corrective': '⚠️',
+                'preventive': '✓'
+            };
+            return icons[type] || '🔧';
+        }
+
+        function getServiceLabel(type) {
+            const labels = {
+                'tire': 'Pneu',
+                'corrective': 'Corretiva',
+                'preventive': 'Preventiva'
+            };
+            return labels[type] || type;
+        }
+
+        function showNotification(message) {
+            const notif = document.getElementById('notification');
+            notif.textContent = message;
+            notif.classList.add('show');
+            setTimeout(() => {
+                notif.classList.remove('show');
+            }, 5000);
+        }
+
+        // Buscar dados a cada 3 segundos
+        fetchAttendances();
+        setInterval(fetchAttendances, 3000);
+    </script>
+</body>
+</html>
