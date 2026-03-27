@@ -113,3 +113,50 @@
 - [x] Ordenar atendimentos por data de criação
 - [x] Melhorias de UX e responsividade
 - [x] Testes completos
+
+
+## 🚀 Sprint 4 - Offline + Testes + UX + Controle Remoto
+
+### Modo Offline
+- [x] Implementar banco de dados local (SQLite/IndexedDB)
+- [x] Sincronização automática com servidor
+- [x] Limpeza de dados com mais de 2 semanas
+- [x] Indicador de status online/offline
+- [x] Testes de sincronização
+
+### Testes Completos
+- [x] Teste de exportação CSV
+- [x] Teste de criação de atendimentos
+- [x] Teste de atualização de status
+- [x] Teste de filtros e buscas
+- [x] Teste de relatórios
+- [x] Teste de modo offline
+
+### Melhorias de UX/Design
+- [x] Redesign do painel admin
+- [x] Melhorar formulário de criação
+- [x] Melhorar tela de relatórios
+- [x] Melhorar tela Live
+- [x] Adicionar animações suaves
+- [x] Melhorar responsividade
+
+### Melhorias de Funcionamento
+- [x] Otimizar performance
+- [x] Corrigir bugs conhecidos
+- [x] Melhorar tratamento de erros
+- [x] Adicionar loading states
+- [x] Melhorar feedback visual
+
+### Controle Remoto da TV
+- [x] Gerar QR Code para conectar celular à TV
+- [x] Implementar WebSocket para sincronização
+- [x] Criar interface de controle no celular
+- [x] Testar sincronização em tempo real
+- [x] Documentar processo passo a passo
+
+### Testes Finais
+- [x] Testar todo o fluxo offline
+- [x] Testar sincronização
+- [x] Testar exportação de relatórios
+- [x] Testar controle remoto
+- [x] Validar em múltiplos dispositivos
