@@ -256,3 +256,42 @@
 - [x] Testar em múltiplos dispositivos
 - [x] Validar performance
 - [x] Corrigir bugs encontrados
+
+
+## 🎯 Sprint 7 - Supabase + FCM + Roles + Serviços
+
+### Supabase
+- [ ] Configurar Supabase como banco principal
+- [ ] Migrar dados do banco local
+- [ ] Criar tabelas de roles e permissões
+- [ ] Implementar autenticação com Supabase
+
+### Firebase Cloud Messaging (FCM)
+- [ ] Configurar Firebase Console
+- [ ] Implementar FCM no app
+- [ ] Criar serviço de notificações
+- [ ] Testar envio de notificações
+
+### Sistema de Roles
+- [ ] Criar tabelas de roles (Cliente, Operador, Gerente)
+- [ ] Implementar AuthProvider com roles
+- [ ] Criar RoleProvider
+- [ ] Estruturar redirecionamento por perfil
+
+### Serviços
+- [ ] Criar orders.service.ts
+- [ ] Criar timeline.service.ts
+- [ ] Criar dashboard.service.ts
+- [ ] Criar attachments.service.ts
+
+### UX e Componentes
+- [ ] Criar tema profissional
+- [ ] Criar componentes base (Button, Input, Card)
+- [ ] Criar StatusBadge
+- [ ] Implementar layouts por role
+
+### Testes
+- [ ] Testar autenticação
+- [ ] Testar roles e redirecionamento
+- [ ] Testar notificações
+- [ ] Testar serviços
