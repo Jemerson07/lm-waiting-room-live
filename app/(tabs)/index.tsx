@@ -36,13 +36,8 @@ export default function AdminScreen() {
   const cardBackground = useThemeColor({}, "cardBackground");
   const borderColor = useThemeColor({}, "border");
 
-  const {
-    attendances,
-    loading,
-    createAttendance,
-    updateAttendanceStatus,
-    deleteAttendance,
-  } = useAttendances();
+  const { attendances, loading, createAttendance, updateAttendanceStatus, deleteAttendance } =
+    useAttendances();
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [licensePlate, setLicensePlate] = useState("");
@@ -57,7 +52,6 @@ export default function AdminScreen() {
   const [showModelSuggestions, setShowModelSuggestions] = useState(false);
 
   const handleCreateAttendance = async () => {
-    // Validar placa
     if (!licensePlate.trim()) {
       Alert.alert("Erro", "Por favor, informe a placa do veículo");
       return;
@@ -68,13 +62,11 @@ export default function AdminScreen() {
       return;
     }
 
-    // Validar modelo
     if (!vehicleModel.trim()) {
       Alert.alert("Erro", "Por favor, informe o modelo do veículo");
       return;
     }
 
-    // Validar telefone (se fornecido)
     if (customerPhone.trim() && !/^\d{10,15}$/.test(customerPhone.replace(/\D/g, ""))) {
       Alert.alert("Erro", "Telefone inválido. Use apenas números (10-15 dígitos)");
       return;
@@ -96,14 +88,9 @@ export default function AdminScreen() {
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-      
-      // Mostrar mensagem de sucesso
-      Alert.alert(
-        "Sucesso!",
-        `Atendimento criado para ${formatLicensePlate(licensePlate)}`,
-        [{ text: "OK", onPress: () => {} }]
-      );
-      
+
+      Alert.alert("Sucesso!", `Atendimento criado para ${formatLicensePlate(licensePlate)}`, [{ text: "OK" }]);
+
       setShowNewModal(false);
       setLicensePlate("");
       setVehicleModel("");
@@ -124,16 +111,9 @@ export default function AdminScreen() {
     const nextStatus = getNextStatus(attendance.status);
     if (!nextStatus) {
       Alert.alert(
-        "Atendimento Finalizado",
-        `O atendimento de ${attendance.licensePlate} foi concluído. Deseja removê-lo?`,
-        [
-          { text: "Manter", style: "cancel" },
-          {
-            text: "Remover",
-            style: "destructive",
-            onPress: () => handleDelete(attendance.id),
-          },
-        ]
+        "Atendimento concluído",
+        `O atendimento de ${attendance.licensePlate} já está finalizado e continua salvo para histórico e relatórios.`,
+        [{ text: "OK" }],
       );
       return;
     }
@@ -143,7 +123,7 @@ export default function AdminScreen() {
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
-    } catch (error) {
+    } catch {
       Alert.alert("Erro", "Não foi possível atualizar o status");
     }
   };
@@ -154,15 +134,13 @@ export default function AdminScreen() {
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-    } catch (error) {
+    } catch {
       Alert.alert("Erro", "Não foi possível remover o atendimento");
     }
   };
 
   const filteredAttendances =
-    selectedFilter === "all"
-      ? attendances
-      : attendances.filter((a) => a.status === selectedFilter);
+    selectedFilter === "all" ? attendances : attendances.filter((a) => a.status === selectedFilter);
 
   const getStatusColor = (status: AttendanceStatus) => {
     const colorScheme = "light";
@@ -181,15 +159,11 @@ export default function AdminScreen() {
           },
         ]}
       >
-        {/* Header */}
         <View style={styles.header}>
           <ThemedText type="title">Painel Administrativo</ThemedText>
-          <ThemedText style={styles.subtitle}>
-            Gerencie os atendimentos em tempo real
-          </ThemedText>
+          <ThemedText style={styles.subtitle}>Gerencie os atendimentos em tempo real</ThemedText>
         </View>
 
-        {/* Filtros */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filters}>
           <Pressable
             style={[
@@ -199,44 +173,31 @@ export default function AdminScreen() {
             ]}
             onPress={() => setSelectedFilter("all")}
           >
-            <ThemedText
-              style={[
-                styles.filterText,
-                selectedFilter === "all" && styles.filterTextActive,
-              ]}
-            >
+            <ThemedText style={[styles.filterText, selectedFilter === "all" && styles.filterTextActive]}>
               Todos ({attendances.length})
             </ThemedText>
           </Pressable>
 
-          {(["arrival", "waiting", "in_service", "completed"] as AttendanceStatus[]).map(
-            (status) => {
-              const count = attendances.filter((a) => a.status === status).length;
-              return (
-                <Pressable
-                  key={status}
-                  style={[
-                    styles.filterButton,
-                    { backgroundColor: cardBackground, borderColor },
-                    selectedFilter === status && { backgroundColor: tintColor, borderColor: tintColor },
-                  ]}
-                  onPress={() => setSelectedFilter(status)}
-                >
-                  <ThemedText
-                    style={[
-                      styles.filterText,
-                      selectedFilter === status && styles.filterTextActive,
-                    ]}
-                  >
-                    {STATUS_LABELS[status]} ({count})
-                  </ThemedText>
-                </Pressable>
-              );
-            }
-          )}
+          {(["arrival", "waiting", "in_service", "completed"] as AttendanceStatus[]).map((status) => {
+            const count = attendances.filter((a) => a.status === status).length;
+            return (
+              <Pressable
+                key={status}
+                style={[
+                  styles.filterButton,
+                  { backgroundColor: cardBackground, borderColor },
+                  selectedFilter === status && { backgroundColor: tintColor, borderColor: tintColor },
+                ]}
+                onPress={() => setSelectedFilter(status)}
+              >
+                <ThemedText style={[styles.filterText, selectedFilter === status && styles.filterTextActive]}>
+                  {STATUS_LABELS[status]} ({count})
+                </ThemedText>
+              </Pressable>
+            );
+          })}
         </ScrollView>
 
-        {/* Lista de Atendimentos */}
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={tintColor} />
@@ -246,136 +207,119 @@ export default function AdminScreen() {
             <ThemedText style={styles.emptyText}>Nenhum atendimento encontrado</ThemedText>
           </View>
         ) : (
-          filteredAttendances.map((attendance) => (
-            <View key={attendance.id} style={[styles.card, { backgroundColor: cardBackground }]}>
-              <View
-                style={[
-                  styles.statusIndicator,
-                  { backgroundColor: getStatusColor(attendance.status) },
-                ]}
-              />
+          filteredAttendances.map((attendance) => {
+            const nextStatus = getNextStatus(attendance.status);
+            const isCompleted = !nextStatus;
 
-              <View style={styles.cardContent}>
-                <View style={styles.cardHeader}>
-                  <ThemedText type="subtitle" style={styles.licensePlate}>
-                    {attendance.licensePlate}
-                  </ThemedText>
-                  <ThemedText style={styles.elapsedTime}>
-                    {getElapsedTime(attendance.createdAt)}
-                  </ThemedText>
-                </View>
+            return (
+              <View key={attendance.id} style={[styles.card, { backgroundColor: cardBackground }]}>
+                <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(attendance.status) }]} />
 
-                <ThemedText style={styles.vehicleModel}>{attendance.vehicleModel}</ThemedText>
+                <View style={styles.cardContent}>
+                  <View style={styles.cardHeader}>
+                    <ThemedText type="subtitle" style={styles.licensePlate}>
+                      {attendance.licensePlate}
+                    </ThemedText>
+                    <ThemedText style={styles.elapsedTime}>{getElapsedTime(attendance.createdAt)}</ThemedText>
+                  </View>
 
-                <View style={styles.serviceTypeBadgeAdmin}>
-                  <ThemedText style={styles.serviceTypeTextAdmin}>
-                    {SERVICE_TYPE_ICONS[attendance.serviceType]} {SERVICE_TYPE_LABELS[attendance.serviceType]}
-                  </ThemedText>
-                </View>
+                  <ThemedText style={styles.vehicleModel}>{attendance.vehicleModel}</ThemedText>
 
-                {attendance.customerName && (
-                  <ThemedText style={styles.customerName}>
-                    Cliente: {attendance.customerName}
-                  </ThemedText>
-                )}
-
-                {attendance.description && (
-                  <ThemedText style={styles.description} numberOfLines={2}>
-                    {attendance.description}
-                  </ThemedText>
-                )}
-
-                <View style={styles.cardActions}>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: getStatusColor(attendance.status) },
-                    ]}
-                  >
-                    <ThemedText style={styles.statusBadgeText}>
-                      {STATUS_LABELS[attendance.status]}
+                  <View style={styles.serviceTypeBadgeAdmin}>
+                    <ThemedText style={styles.serviceTypeTextAdmin}>
+                      {SERVICE_TYPE_ICONS[attendance.serviceType]} {SERVICE_TYPE_LABELS[attendance.serviceType]}
                     </ThemedText>
                   </View>
 
-                  <View style={styles.actionButtons}>
-                    <Pressable
-                      style={[styles.actionButton, { backgroundColor: tintColor }]}
-                      onPress={() => handleUpdateStatus(attendance)}
-                    >
-                      <ThemedText style={styles.actionButtonText}>
-                        {getNextStatus(attendance.status)
-                          ? `→ ${STATUS_LABELS[getNextStatus(attendance.status)!]}`
-                          : "Finalizado"}
-                      </ThemedText>
-                    </Pressable>
+                  {attendance.customerName && <ThemedText style={styles.customerName}>Cliente: {attendance.customerName}</ThemedText>}
 
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.deleteButton,
-                        {
-                          backgroundColor: pressed ? "rgba(255, 59, 48, 0.1)" : "transparent",
-                          borderColor: "#FF3B30",
-                        },
-                      ]}
-                      onPress={() => {
-                        if (Platform.OS !== "web") {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        }
-                        Alert.alert(
-                          "Remover Atendimento",
-                          `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`,
-                          [
-                            { text: "Manter", style: "cancel" },
-                            {
-                              text: "Remover",
-                              style: "destructive",
-                              onPress: () => handleDelete(attendance.id),
-                            },
-                          ]
-                        );
-                      }}
-                    >
-                      <ThemedText style={[styles.deleteButtonText, { color: "#FF3B30" }]}>
-                        ✗
+                  {attendance.description && (
+                    <ThemedText style={styles.description} numberOfLines={2}>
+                      {attendance.description}
+                    </ThemedText>
+                  )}
+
+                  {isCompleted && (
+                    <View style={styles.historyHint}>
+                      <ThemedText style={styles.historyHintText}>
+                        Atendimento concluído e mantido no histórico do sistema.
                       </ThemedText>
-                    </Pressable>
+                    </View>
+                  )}
+
+                  <View style={styles.cardActions}>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(attendance.status) }]}>
+                      <ThemedText style={styles.statusBadgeText}>{STATUS_LABELS[attendance.status]}</ThemedText>
+                    </View>
+
+                    <View style={styles.actionButtons}>
+                      <Pressable
+                        style={[
+                          styles.actionButton,
+                          { backgroundColor: isCompleted ? "#A0A7B4" : tintColor },
+                          isCompleted && styles.actionButtonDisabled,
+                        ]}
+                        onPress={() => handleUpdateStatus(attendance)}
+                        disabled={isCompleted}
+                      >
+                        <ThemedText style={styles.actionButtonText}>
+                          {nextStatus ? `→ ${STATUS_LABELS[nextStatus]}` : "Concluído"}
+                        </ThemedText>
+                      </Pressable>
+
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.deleteButton,
+                          {
+                            backgroundColor: pressed ? "rgba(255, 59, 48, 0.1)" : "transparent",
+                            borderColor: "#FF3B30",
+                          },
+                        ]}
+                        onPress={() => {
+                          if (Platform.OS !== "web") {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          }
+                          Alert.alert(
+                            "Remover Atendimento",
+                            `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`,
+                            [
+                              { text: "Manter", style: "cancel" },
+                              {
+                                text: "Remover",
+                                style: "destructive",
+                                onPress: () => handleDelete(attendance.id),
+                              },
+                            ],
+                          );
+                        }}
+                      >
+                        <ThemedText style={[styles.deleteButtonText, { color: "#FF3B30" }]}>✗</ThemedText>
+                      </Pressable>
+                    </View>
                   </View>
                 </View>
               </View>
-            </View>
-          ))
+            );
+          })
         )}
       </ScrollView>
 
-      {/* Botão Flutuante para Adicionar */}
       <Pressable
         style={[
           styles.fab,
-          {
-            backgroundColor: tintColor,
-            bottom: Math.max(insets.bottom, 20) + 60,
-          },
+          { backgroundColor: tintColor, bottom: Math.max(insets.bottom, 20) + 60 },
         ]}
         onPress={() => setShowNewModal(true)}
       >
         <ThemedText style={styles.fabText}>+</ThemedText>
       </Pressable>
 
-      {/* Modal de Novo Atendimento */}
-      <Modal
-        visible={showNewModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowNewModal(false)}
-      >
+      <Modal visible={showNewModal} animationType="slide" transparent onRequestClose={() => setShowNewModal(false)}>
         <View style={styles.modalOverlay}>
           <View
             style={[
               styles.modalContent,
-              {
-                backgroundColor,
-                paddingBottom: Math.max(insets.bottom, 20) + 20,
-              },
+              { backgroundColor, paddingBottom: Math.max(insets.bottom, 20) + 20 },
             ]}
           >
             <View style={styles.modalHeader}>
@@ -451,9 +395,7 @@ export default function AdminScreen() {
                     ]}
                     onPress={() => setServiceType("tire")}
                   >
-                    <ThemedText style={[styles.serviceTypeText, serviceType === "tire" && styles.serviceTypeTextActive]}>
-                      🔧 Pneu
-                    </ThemedText>
+                    <ThemedText style={[styles.serviceTypeText, serviceType === "tire" && styles.serviceTypeTextActive]}>🔧 Pneu</ThemedText>
                   </Pressable>
                   <Pressable
                     style={[
@@ -463,9 +405,7 @@ export default function AdminScreen() {
                     ]}
                     onPress={() => setServiceType("corrective")}
                   >
-                    <ThemedText style={[styles.serviceTypeText, serviceType === "corrective" && styles.serviceTypeTextActive]}>
-                      ⚠️ Corretiva
-                    </ThemedText>
+                    <ThemedText style={[styles.serviceTypeText, serviceType === "corrective" && styles.serviceTypeTextActive]}>⚠️ Corretiva</ThemedText>
                   </Pressable>
                   <Pressable
                     style={[
@@ -475,9 +415,7 @@ export default function AdminScreen() {
                     ]}
                     onPress={() => setServiceType("preventive")}
                   >
-                    <ThemedText style={[styles.serviceTypeText, serviceType === "preventive" && styles.serviceTypeTextActive]}>
-                      ✓ Preventiva
-                    </ThemedText>
+                    <ThemedText style={[styles.serviceTypeText, serviceType === "preventive" && styles.serviceTypeTextActive]}>✓ Preventiva</ThemedText>
                   </Pressable>
                 </View>
               </View>
@@ -503,19 +441,13 @@ export default function AdminScreen() {
                   placeholderTextColor="#999"
                   keyboardType="phone-pad"
                 />
-                <ThemedText style={styles.helperText}>
-                  Deixe em branco para não enviar notificações via WhatsApp
-                </ThemedText>
+                <ThemedText style={styles.helperText}>Deixe em branco para não enviar notificações via WhatsApp</ThemedText>
               </View>
 
               <View style={styles.formGroup}>
                 <ThemedText style={styles.label}>Descrição</ThemedText>
                 <TextInput
-                  style={[
-                    styles.input,
-                    styles.textArea,
-                    { backgroundColor: cardBackground, borderColor },
-                  ]}
+                  style={[styles.input, styles.textArea, { backgroundColor: cardBackground, borderColor }]}
                   value={description}
                   onChangeText={setDescription}
                   placeholder="Detalhes do atendimento (opcional)"
@@ -534,11 +466,7 @@ export default function AdminScreen() {
                 onPress={handleCreateAttendance}
                 disabled={submitting}
               >
-                {submitting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <ThemedText style={styles.submitButtonText}>Criar Atendimento</ThemedText>
-                )}
+                {submitting ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.submitButtonText}>Criar Atendimento</ThemedText>}
               </Pressable>
             </ScrollView>
           </View>
@@ -549,274 +477,61 @@ export default function AdminScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-  },
-  header: {
-    marginBottom: 24,
-  },
-  subtitle: {
-    fontSize: 16,
-    opacity: 0.7,
-    marginTop: 8,
-  },
-  filters: {
-    marginBottom: 24,
-    marginHorizontal: -20,
-    paddingHorizontal: 20,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    borderWidth: 1,
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  filterTextActive: {
-    color: "#FFFFFF",
-  },
-  loadingContainer: {
-    paddingVertical: 40,
-    alignItems: "center",
-  },
-  emptyState: {
-    paddingVertical: 60,
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 16,
-    opacity: 0.5,
-  },
-  card: {
-    borderRadius: 12,
-    marginBottom: 16,
-    overflow: "hidden",
-    flexDirection: "row",
-  },
-  statusIndicator: {
-    width: 4,
-  },
-  cardContent: {
-    flex: 1,
-    padding: 16,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  licensePlate: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  elapsedTime: {
-    fontSize: 12,
-    opacity: 0.6,
-  },
-  vehicleModel: {
-    fontSize: 16,
-    marginBottom: 4,
-  },
-  customerName: {
-    fontSize: 14,
-    opacity: 0.8,
-    marginBottom: 4,
-  },
-  description: {
-    fontSize: 14,
-    opacity: 0.7,
-    marginBottom: 12,
-  },
-  cardActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 8,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  actionButtons: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  actionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minHeight: 36,
-    justifyContent: "center",
-  },
-  actionButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  deleteButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  deleteButtonText: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  fab: {
-    position: "absolute",
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  fabText: {
-    color: "#FFFFFF",
-    fontSize: 32,
-    fontWeight: "300",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "90%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E1E4E8",
-  },
-  closeButton: {
-    fontSize: 24,
-    opacity: 0.6,
-  },
-  modalScroll: {
-    padding: 20,
-  },
-  formGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  helperText: {
-    fontSize: 12,
-    opacity: 0.6,
-    marginTop: 6,
-  },
-  textArea: {
-    minHeight: 100,
-    textAlignVertical: "top",
-  },
-  submitButton: {
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  serviceTypeContainer: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  serviceTypeButton: {
-    flex: 1,
-    minWidth: 100,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  serviceTypeText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  serviceTypeTextActive: {
-    color: "#FFFFFF",
-  },
-  serviceTypeBadgeAdmin: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(0, 102, 204, 0.1)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginTop: 6,
-    marginBottom: 4,
-  },
-  serviceTypeTextAdmin: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#0066CC",
-  },
-  suggestionsContainer: {
-    borderWidth: 1,
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
-    maxHeight: 200,
-    marginTop: -8,
-    marginHorizontal: -1,
-  },
-  suggestionsList: {
-    maxHeight: 200,
-  },
-  suggestionItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 0, 0, 0.05)",
-  },
-  suggestionText: {
-    fontSize: 14,
-  },
+  container: { flex: 1 },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20 },
+  header: { marginBottom: 24 },
+  subtitle: { fontSize: 16, opacity: 0.7, marginTop: 8 },
+  filters: { marginBottom: 24, marginHorizontal: -20, paddingHorizontal: 20 },
+  filterButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1 },
+  filterText: { fontSize: 14, fontWeight: "600" },
+  filterTextActive: { color: "#FFFFFF" },
+  loadingContainer: { paddingVertical: 40, alignItems: "center" },
+  emptyState: { paddingVertical: 60, alignItems: "center" },
+  emptyText: { fontSize: 16, opacity: 0.5 },
+  card: { borderRadius: 12, marginBottom: 16, overflow: "hidden", flexDirection: "row" },
+  statusIndicator: { width: 4 },
+  cardContent: { flex: 1, padding: 16 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  licensePlate: { fontSize: 20, fontWeight: "bold" },
+  elapsedTime: { fontSize: 12, opacity: 0.6 },
+  vehicleModel: { fontSize: 16, marginBottom: 4 },
+  customerName: { fontSize: 14, opacity: 0.8, marginBottom: 4 },
+  description: { fontSize: 14, opacity: 0.7, marginBottom: 12 },
+  historyHint: { backgroundColor: "rgba(0, 200, 83, 0.08)", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginTop: 4, marginBottom: 10 },
+  historyHintText: { fontSize: 12, color: "#1C7C54", fontWeight: "600" },
+  cardActions: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  statusBadgeText: { color: "#FFFFFF", fontSize: 12, fontWeight: "600" },
+  actionButtons: { flexDirection: "row", gap: 8 },
+  actionButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, minHeight: 36, justifyContent: "center" },
+  actionButtonDisabled: { opacity: 0.9 },
+  actionButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "600" },
+  deleteButton: { width: 36, height: 36, borderRadius: 8, borderWidth: 1, justifyContent: "center", alignItems: "center" },
+  deleteButtonText: { fontSize: 18, fontWeight: "bold" },
+  fab: { position: "absolute", right: 20, width: 56, height: 56, borderRadius: 28, justifyContent: "center", alignItems: "center", elevation: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+  fabText: { color: "#FFFFFF", fontSize: 32, fontWeight: "300" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "flex-end" },
+  modalContent: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "90%" },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderBottomColor: "#E1E4E8" },
+  closeButton: { fontSize: 24, opacity: 0.6 },
+  modalScroll: { padding: 20 },
+  formGroup: { marginBottom: 20 },
+  label: { fontSize: 14, fontWeight: "600", marginBottom: 8 },
+  input: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
+  helperText: { fontSize: 12, opacity: 0.6, marginTop: 6 },
+  textArea: { minHeight: 100, textAlignVertical: "top" },
+  submitButton: { paddingVertical: 16, borderRadius: 8, alignItems: "center", marginTop: 8 },
+  submitButtonDisabled: { opacity: 0.6 },
+  submitButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
+  serviceTypeContainer: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  serviceTypeButton: { flex: 1, minWidth: 100, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, alignItems: "center" },
+  serviceTypeText: { fontSize: 14, fontWeight: "600" },
+  serviceTypeTextActive: { color: "#FFFFFF" },
+  serviceTypeBadgeAdmin: { alignSelf: "flex-start", backgroundColor: "rgba(0, 102, 204, 0.1)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginTop: 6, marginBottom: 4 },
+  serviceTypeTextAdmin: { fontSize: 12, fontWeight: "600", color: "#0066CC" },
+  suggestionsContainer: { borderWidth: 1, borderTopWidth: 0, borderBottomLeftRadius: 8, borderBottomRightRadius: 8, maxHeight: 200, marginTop: -8, marginHorizontal: -1 },
+  suggestionsList: { maxHeight: 200 },
+  suggestionItem: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: "rgba(0, 0, 0, 0.05)" },
+  suggestionText: { fontSize: 14 },
 });

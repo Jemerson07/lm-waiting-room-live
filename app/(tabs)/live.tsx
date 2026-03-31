@@ -1,6 +1,6 @@
 import { StyleSheet, View, ScrollView, RefreshControl, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { NivusBackground } from "@/components/nivus-background";
@@ -20,7 +20,7 @@ const STATUS_MESSAGES: Record<AttendanceStatus, string> = {
   completed: "Atendimento concluído com sucesso. Obrigado pela confiança.",
 };
 
-const STATUS_ORDER: AttendanceStatus[] = ["arrival", "waiting", "in_service", "completed"];
+const STATUS_ORDER: AttendanceStatus[] = ["arrival", "waiting", "in_service"];
 
 export default function LiveScreen() {
   const insets = useSafeAreaInsets();
@@ -50,6 +50,11 @@ export default function LiveScreen() {
     in_service: attendances.filter((a) => a.status === "in_service"),
     completed: attendances.filter((a) => a.status === "completed"),
   };
+
+  const activeAttendances = useMemo(
+    () => STATUS_ORDER.flatMap((status) => groupedAttendances[status]),
+    [groupedAttendances],
+  );
 
   return (
     <ThemedView style={styles.container}>
@@ -102,10 +107,10 @@ export default function LiveScreen() {
           );
         })}
 
-        {attendances.length === 0 && !loading && (
+        {activeAttendances.length === 0 && !loading && (
           <View style={styles.emptyState}>
             <ThemedText type="subtitle" style={styles.emptyTitle}>
-              Nenhum atendimento no momento
+              Nenhum atendimento ativo no momento
             </ThemedText>
             <ThemedText style={styles.emptyText}>
               Quando novos veículos entrarem na fila, eles aparecerão aqui automaticamente.
