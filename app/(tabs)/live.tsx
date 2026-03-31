@@ -1,14 +1,6 @@
-import {
-  StyleSheet,
-  View,
-  ScrollView,
-  RefreshControl,
-  useWindowDimensions,
-  Dimensions,
-} from "react-native";
+import { StyleSheet, View, ScrollView, RefreshControl, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEffect, useState, useCallback } from "react";
-import { Image } from "expo-image";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { NivusBackground } from "@/components/nivus-background";
@@ -22,37 +14,36 @@ import { STATUS_LABELS } from "@/types/attendance";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const STATUS_MESSAGES: Record<AttendanceStatus, string> = {
-  arrival: "Seu veículo chegou! Estamos preparando o atendimento",
-  waiting: "Em breve iniciaremos o atendimento do seu veículo",
-  in_service: "Seu veículo está sendo atendido agora",
-  completed: "Atendimento concluído! Obrigado pela confiança",
+  arrival: "Seu veículo chegou e já entrou no fluxo de atendimento.",
+  waiting: "Estamos organizando a fila e em breve iniciaremos o serviço.",
+  in_service: "Seu veículo está em manutenção neste momento.",
+  completed: "Atendimento concluído com sucesso. Obrigado pela confiança.",
 };
+
+const STATUS_ORDER: AttendanceStatus[] = ["arrival", "waiting", "in_service", "completed"];
 
 export default function LiveScreen() {
   const insets = useSafeAreaInsets();
   const { attendances, loading, reload } = useAttendances();
   const { settings } = useCompanySettings();
   const [refreshing, setRefreshing] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Atualização automática a cada 3 segundos
+  const refreshInterval = Math.max(settings.autoRefreshInterval || 3, 1);
+
   useEffect(() => {
     const interval = setInterval(() => {
       reload();
-      setCurrentTime(new Date());
-    }, 3000);
+    }, refreshInterval * 1000);
 
     return () => clearInterval(interval);
-  }, [reload]);
+  }, [refreshInterval, reload]);
 
-  // Pull to refresh
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await reload();
     setRefreshing(false);
   }, [reload]);
 
-  // Agrupar atendimentos por status
   const groupedAttendances: Record<AttendanceStatus, typeof attendances> = {
     arrival: attendances.filter((a) => a.status === "arrival"),
     waiting: attendances.filter((a) => a.status === "waiting"),
@@ -62,7 +53,6 @@ export default function LiveScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* Background animado com imagem do VW Nivus */}
       <NivusBackground />
 
       <LiveHeader
@@ -75,68 +65,60 @@ export default function LiveScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: 20,
-            paddingBottom: Math.max(insets.bottom, 20) + 20,
+            paddingTop: 8,
+            paddingBottom: Math.max(insets.bottom, 20) + 28,
           },
         ]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" />
         }
       >
+        {STATUS_ORDER.map((status) => {
+          const items = groupedAttendances[status];
+          if (items.length === 0) return null;
 
-        {/* Seções por Status */}
-        {(["arrival", "waiting", "in_service", "completed"] as AttendanceStatus[]).map(
-          (status) => {
-            const items = groupedAttendances[status];
-            if (items.length === 0) return null;
-
-            return (
-              <View key={status} style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <View style={styles.sectionTitleContainer}>
-                    <ThemedText type="subtitle" style={styles.sectionTitle}>
-                      {STATUS_LABELS[status]}
-                    </ThemedText>
-                    <View style={styles.badge}>
-                      <ThemedText style={styles.badgeText}>{items.length}</ThemedText>
-                    </View>
-                  </View>
-                  <ThemedText style={styles.sectionMessage}>
-                    {STATUS_MESSAGES[status]}
+          return (
+            <View key={status} style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeadingRow}>
+                  <ThemedText type="subtitle" style={styles.sectionTitle}>
+                    {STATUS_LABELS[status]}
                   </ThemedText>
+                  <View style={styles.badge}>
+                    <ThemedText style={styles.badgeText}>{items.length}</ThemedText>
+                  </View>
                 </View>
-
-                {items.map((attendance) => (
-                  <VehicleCard
-                    key={attendance.id}
-                    attendance={attendance}
-                    showAnimation={status === "in_service"}
-                  />
-                ))}
+                <ThemedText style={styles.sectionMessage}>{STATUS_MESSAGES[status]}</ThemedText>
               </View>
-            );
-          }
-        )}
 
-        {/* Mensagem quando não há atendimentos */}
+              {items.map((attendance) => (
+                <VehicleCard
+                  key={attendance.id}
+                  attendance={attendance}
+                  showAnimation={status === "in_service"}
+                />
+              ))}
+            </View>
+          );
+        })}
+
         {attendances.length === 0 && !loading && (
           <View style={styles.emptyState}>
-            <ThemedText type="subtitle" style={styles.emptyText}>
+            <ThemedText type="subtitle" style={styles.emptyTitle}>
               Nenhum atendimento no momento
             </ThemedText>
-            <ThemedText style={styles.emptySubtext}>
-              Os veículos aparecerão aqui automaticamente
+            <ThemedText style={styles.emptyText}>
+              Quando novos veículos entrarem na fila, eles aparecerão aqui automaticamente.
             </ThemedText>
           </View>
         )}
 
-        {/* Footer */}
         <View style={styles.footer}>
           <ThemedText style={styles.footerText}>
             Sistema de Atendimento Veicular • {settings.companyName}
           </ThemedText>
           <ThemedText style={styles.footerSubtext}>
-            Atualização automática a cada 3 segundos
+            Atualização automática a cada {refreshInterval} segundos
           </ThemedText>
         </View>
       </ScrollView>
@@ -152,127 +134,94 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: SCREEN_WIDTH > 768 ? 40 : 0,
-    maxWidth: SCREEN_WIDTH > 1024 ? 1200 : "100%",
+    paddingHorizontal: SCREEN_WIDTH > 768 ? 32 : 0,
+    maxWidth: SCREEN_WIDTH > 1280 ? 1380 : "100%",
     alignSelf: "center",
     width: "100%",
   },
-  header: {
-    alignItems: "center",
-    marginBottom: 32,
-    paddingHorizontal: 20,
-  },
-  logoContainer: {
-    marginBottom: 16,
-  },
-  logoCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 3,
-    borderColor: "rgba(255, 255, 255, 0.4)",
-  },
-  logoText: {
-    fontSize: 48,
-  },
-  companyName: {
-    fontSize: SCREEN_WIDTH > 768 ? 48 : 36,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    textAlign: "center",
-    marginBottom: 8,
-    textShadowColor: "rgba(0, 0, 0, 0.5)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#FFFFFF",
-    opacity: 0.9,
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  clock: {
-    fontSize: 24,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    opacity: 0.8,
-  },
   section: {
-    marginBottom: 32,
+    marginBottom: 22,
+    backgroundColor: "rgba(4, 16, 29, 0.34)",
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    paddingTop: 16,
+    paddingBottom: 6,
+    overflow: "hidden",
   },
   sectionHeader: {
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  sectionTitleContainer: {
+  sectionHeadingRow: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: SCREEN_WIDTH > 768 ? 32 : 24,
-    fontWeight: "bold",
+    fontSize: SCREEN_WIDTH > 768 ? 28 : 22,
+    fontWeight: "800",
     color: "#FFFFFF",
-    marginRight: 12,
+    marginRight: 10,
   },
   badge: {
-    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    backgroundColor: "rgba(255,255,255,0.14)",
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    minWidth: 32,
+    paddingVertical: 5,
+    borderRadius: 999,
+    minWidth: 34,
     alignItems: "center",
   },
   badgeText: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "800",
   },
   sectionMessage: {
-    fontSize: 14,
-    color: "#FFFFFF",
-    opacity: 0.8,
-    fontStyle: "italic",
+    fontSize: 13,
+    color: "rgba(255,255,255,0.78)",
+    lineHeight: 20,
   },
   emptyState: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    backgroundColor: "rgba(3, 18, 33, 0.62)",
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 30,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 80,
-    paddingHorizontal: 40,
   },
-  emptyText: {
-    fontSize: 20,
+  emptyTitle: {
+    fontSize: 22,
     color: "#FFFFFF",
     textAlign: "center",
     marginBottom: 8,
+    fontWeight: "800",
   },
-  emptySubtext: {
+  emptyText: {
     fontSize: 14,
-    color: "#FFFFFF",
-    opacity: 0.7,
+    color: "rgba(255,255,255,0.74)",
     textAlign: "center",
+    lineHeight: 22,
+    maxWidth: 560,
   },
   footer: {
     alignItems: "center",
-    marginTop: 40,
-    paddingHorizontal: 0,
-    paddingBottom: 20,
+    marginTop: 8,
+    paddingHorizontal: 18,
+    paddingBottom: 8,
   },
   footerText: {
     fontSize: 12,
-    color: "#FFFFFF",
-    opacity: 0.6,
+    color: "rgba(255,255,255,0.72)",
     textAlign: "center",
     marginBottom: 4,
   },
   footerSubtext: {
-    fontSize: 10,
-    color: "#FFFFFF",
-    opacity: 0.5,
+    fontSize: 11,
+    color: "rgba(255,255,255,0.54)",
     textAlign: "center",
   },
 });

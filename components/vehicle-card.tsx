@@ -1,4 +1,5 @@
 import { StyleSheet, View, Dimensions } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -22,21 +23,16 @@ export function VehicleCard({ attendance, showAnimation = false }: VehicleCardPr
   const opacity = useSharedValue(0);
 
   useEffect(() => {
-    // Animação de entrada (fade in)
-    opacity.value = withTiming(1, { duration: 500 });
+    opacity.value = withTiming(1, { duration: 450 });
 
-    // Animação de pulso para veículos em manutenção
     if (showAnimation) {
       scale.value = withRepeat(
-        withSequence(
-          withTiming(1.02, { duration: 1000 }),
-          withTiming(1, { duration: 1000 })
-        ),
+        withSequence(withTiming(1.015, { duration: 1100 }), withTiming(1, { duration: 1100 })),
         -1,
-        false
+        false,
       );
     }
-  }, [showAnimation]);
+  }, [opacity, scale, showAnimation]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -49,100 +45,134 @@ export function VehicleCard({ attendance, showAnimation = false }: VehicleCardPr
     return Colors[colorScheme][statusKey] as string;
   };
 
+  const statusColor = getStatusColor(attendance.status);
+
   return (
     <Animated.View style={[styles.card, animatedStyle]}>
-      <View style={styles.cardContent}>
+      <LinearGradient
+        colors={["rgba(3, 19, 34, 0.86)", "rgba(7, 29, 51, 0.74)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.surface}
+      >
         <View style={styles.header}>
-          <ThemedText style={[styles.licensePlate, { color: getStatusColor(attendance.status) }]}>
-            {attendance.licensePlate}
-          </ThemedText>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(attendance.status) }]}>
+          <View>
+            <ThemedText style={[styles.licensePlate, { color: statusColor }]}>
+              {attendance.licensePlate}
+            </ThemedText>
+            <ThemedText style={styles.vehicleModel}>{attendance.vehicleModel}</ThemedText>
+          </View>
+
+          <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
             <ThemedText style={styles.statusText}>{STATUS_LABELS[attendance.status]}</ThemedText>
           </View>
         </View>
 
-        <ThemedText style={styles.vehicleModel}>{attendance.vehicleModel}</ThemedText>
+        <View style={styles.metaRow}>
+          <View style={styles.serviceTypeBadge}>
+            <ThemedText style={styles.serviceTypeText}>
+              {SERVICE_TYPE_ICONS[attendance.serviceType]} {SERVICE_TYPE_LABELS[attendance.serviceType]}
+            </ThemedText>
+          </View>
 
-        <View style={styles.serviceTypeBadge}>
-          <ThemedText style={styles.serviceTypeText}>
-            {SERVICE_TYPE_ICONS[attendance.serviceType]} {SERVICE_TYPE_LABELS[attendance.serviceType]}
-          </ThemedText>
+          {attendance.customerName ? (
+            <View style={styles.customerBadge}>
+              <ThemedText style={styles.customerName}>Cliente: {attendance.customerName}</ThemedText>
+            </View>
+          ) : null}
         </View>
 
-        {attendance.customerName && (
-          <ThemedText style={styles.customerName}>Cliente: {attendance.customerName}</ThemedText>
-        )}
-      </View>
-
-      {showAnimation && (
-        <View style={[styles.pulseIndicator, { backgroundColor: getStatusColor(attendance.status) }]} />
-      )}
+        {showAnimation ? (
+          <View style={[styles.pulseBar, { backgroundColor: statusColor }]} />
+        ) : null}
+      </LinearGradient>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
-    borderRadius: 16,
-    marginHorizontal: 20,
     marginBottom: 16,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    minHeight: Dimensions.get("window").width > 768 ? 140 : 120,
   },
-  cardContent: {
-    padding: 20,
+  surface: {
+    borderRadius: 22,
+    marginHorizontal: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 6,
+    minHeight: Dimensions.get("window").width > 768 ? 146 : 128,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
+    alignItems: "flex-start",
+    gap: 12,
   },
   licensePlate: {
-    fontSize: Dimensions.get("window").width > 768 ? 28 : 24,
-    fontWeight: "bold",
+    fontSize: Dimensions.get("window").width > 768 ? 30 : 25,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  vehicleModel: {
+    fontSize: Dimensions.get("window").width > 768 ? 20 : 17,
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    alignSelf: "flex-start",
   },
   statusText: {
     color: "#FFFFFF",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "800",
+    letterSpacing: 0.4,
   },
-  vehicleModel: {
-    fontSize: Dimensions.get("window").width > 768 ? 20 : 18,
-    color: "#11181C",
-    marginBottom: 8,
-  },
-  customerName: {
-    fontSize: 16,
-    color: "#687076",
-  },
-  pulseIndicator: {
-    height: 4,
-    width: "100%",
+  metaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 16,
+    alignItems: "center",
   },
   serviceTypeBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(0, 102, 204, 0.15)",
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginTop: 8,
-    marginBottom: 4,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
   },
   serviceTypeText: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#E6F0FF",
+  },
+  customerBadge: {
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  customerName: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.80)",
     fontWeight: "600",
-    color: "#0066CC",
+  },
+  pulseBar: {
+    height: 4,
+    borderRadius: 999,
+    marginTop: 16,
+    width: "100%",
   },
 });
