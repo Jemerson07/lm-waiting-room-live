@@ -1,6 +1,7 @@
 import { StyleSheet, View, ScrollView, RefreshControl, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { LiveMotionBlock } from "@/components/live-motion-block";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { CompletedVehiclesPanel } from "@/components/completed-vehicles-panel";
@@ -75,44 +76,58 @@ export default function LiveScreen() {
   return (
     <ThemedView style={styles.container}>
       <NivusBackground />
-      <LiveHeader totalAttendances={attendances.length} completedAttendances={grouped.completed.length} />
+      <LiveMotionBlock delay={0} intensity="soft">
+        <LiveHeader totalAttendances={attendances.length} completedAttendances={grouped.completed.length} />
+      </LiveMotionBlock>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingTop: 8, paddingBottom: Math.max(insets.bottom, 20) + 28 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" />}
       >
-        {spotlightAttendance ? <LiveServiceSpotlight attendance={spotlightAttendance} /> : null}
+        {spotlightAttendance ? (
+          <LiveMotionBlock delay={120} intensity="medium">
+            <LiveServiceSpotlight attendance={spotlightAttendance} />
+          </LiveMotionBlock>
+        ) : null}
 
-        {STATUS_ORDER.map((status) => {
+        {STATUS_ORDER.map((status, index) => {
           const items = status === "in_service" ? inServiceQueue : grouped[status];
           if (!items.length) return null;
           return (
-            <View key={status} style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionHeadingRow}>
-                  <ThemedText type="subtitle" style={styles.sectionTitle}>{STATUS_LABELS[status]}</ThemedText>
-                  <View style={styles.badge}><ThemedText style={styles.badgeText}>{items.length}</ThemedText></View>
+            <LiveMotionBlock key={status} delay={220 + index * 110} intensity={status === "in_service" ? "medium" : "soft"}>
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionHeadingRow}>
+                    <ThemedText type="subtitle" style={styles.sectionTitle}>{STATUS_LABELS[status]}</ThemedText>
+                    <View style={styles.badge}><ThemedText style={styles.badgeText}>{items.length}</ThemedText></View>
+                  </View>
+                  <ThemedText style={styles.sectionMessage}>{STATUS_MESSAGES[status]}</ThemedText>
                 </View>
-                <ThemedText style={styles.sectionMessage}>{STATUS_MESSAGES[status]}</ThemedText>
+                {items.map((attendance) => <VehicleCard key={attendance.id} attendance={attendance} showAnimation={status === "in_service"} />)}
               </View>
-              {items.map((attendance) => <VehicleCard key={attendance.id} attendance={attendance} showAnimation={status === "in_service"} />)}
-            </View>
+            </LiveMotionBlock>
           );
         })}
 
         {!active.length && !loading && (
-          <View style={styles.emptyState}>
-            <ThemedText type="subtitle" style={styles.emptyTitle}>Nenhum atendimento ativo no momento</ThemedText>
-            <ThemedText style={styles.emptyText}>Quando novos veículos entrarem na fila, eles aparecerão aqui automaticamente.</ThemedText>
-          </View>
+          <LiveMotionBlock delay={300} intensity="soft">
+            <View style={styles.emptyState}>
+              <ThemedText type="subtitle" style={styles.emptyTitle}>Nenhum atendimento ativo no momento</ThemedText>
+              <ThemedText style={styles.emptyText}>Quando novos veículos entrarem na fila, eles aparecerão aqui automaticamente.</ThemedText>
+            </View>
+          </LiveMotionBlock>
         )}
 
-        <CompletedVehiclesPanel items={recentCompleted} totalCompleted={grouped.completed.length} />
+        <LiveMotionBlock delay={420} intensity="soft">
+          <CompletedVehiclesPanel items={recentCompleted} totalCompleted={grouped.completed.length} />
+        </LiveMotionBlock>
 
-        <View style={styles.footer}>
-          <ThemedText style={styles.footerText}>Sistema de Atendimento Veicular • {settings.companyName}</ThemedText>
-          <ThemedText style={styles.footerSubtext}>Atualização automática a cada {refreshInterval} segundos</ThemedText>
-        </View>
+        <LiveMotionBlock delay={520} intensity="soft">
+          <View style={styles.footer}>
+            <ThemedText style={styles.footerText}>Sistema de Atendimento Veicular • {settings.companyName}</ThemedText>
+            <ThemedText style={styles.footerSubtext}>Atualização automática a cada {refreshInterval} segundos</ThemedText>
+          </View>
+        </LiveMotionBlock>
       </ScrollView>
     </ThemedView>
   );
