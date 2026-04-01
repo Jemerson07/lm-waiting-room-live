@@ -1,8 +1,9 @@
+import { TRPCError } from "@trpc/server";
+import { z } from "zod";
 import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, operatorProcedure, publicProcedure, router } from "./_core/trpc";
-import { z } from "zod";
 import * as db from "./db";
 
 export const appRouter = router({
@@ -14,6 +15,26 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+  }),
+  users: router({
+    list: adminProcedure.query(async () => {
+      return db.getAllUsers();
+    }),
+    updateRole: adminProcedure
+      .input(
+        z.object({
+          userId: z.number(),
+          role: z.enum(["user", "admin"]),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.id === input.userId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode alterar seu próprio papel." });
+        }
+
+        const updatedUser = await db.updateUserRole(input.userId, input.role);
+        return { success: true, user: updatedUser };
+      }),
   }),
   attendances: router({
     liveList: publicProcedure.query(async () => {

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import { AccessRequiredCard } from "@/components/access-required-card";
+import { UserRoleManagement } from "@/components/user-role-management";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -121,6 +122,13 @@ export default function SettingsScreen() {
     <ThemedView style={[styles.container, { backgroundColor }]}>
       <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }]}>
         <View style={styles.header}><ThemedText type="title">Configurações</ThemedText><ThemedText style={styles.subtitle}>Personalize seu sistema de atendimento</ThemedText></View>
+
+        <UserRoleManagement
+          currentUserId={user.id}
+          tintColor={tintColor}
+          cardBackground={cardBackground}
+          borderColor={borderColor}
+        />
 
         <View style={[styles.section, { backgroundColor: cardBackground }]}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>📋 Informações da Empresa</ThemedText>
