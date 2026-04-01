@@ -3,15 +3,14 @@ import {
   View,
   ScrollView,
   Pressable,
-  TextInput,
   Alert,
-  Modal,
   ActivityIndicator,
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMemo, useState } from "react";
 import * as Haptics from "expo-haptics";
+import { AdminCreateAttendanceModal } from "@/components/admin-create-attendance-modal";
 import { AdminOverview } from "@/components/admin-overview";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -28,7 +27,6 @@ import {
   getElapsedTime,
 } from "@/types/attendance";
 import { Colors } from "@/constants/theme";
-import { searchVehicleModels } from "@/lib/vehicle-models";
 
 const STATUS_SORT_ORDER: Record<AttendanceStatus, number> = {
   arrival: 0,
@@ -44,13 +42,8 @@ export default function AdminScreen() {
   const cardBackground = useThemeColor({}, "cardBackground");
   const borderColor = useThemeColor({}, "border");
 
-  const {
-    attendances,
-    loading,
-    createAttendance,
-    updateAttendanceStatus,
-    deleteAttendance,
-  } = useAttendances();
+  const { attendances, loading, createAttendance, updateAttendanceStatus, deleteAttendance } =
+    useAttendances();
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [licensePlate, setLicensePlate] = useState("");
@@ -62,8 +55,6 @@ export default function AdminScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<AttendanceStatus | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [vehicleModelSuggestions, setVehicleModelSuggestions] = useState<string[]>([]);
-  const [showModelSuggestions, setShowModelSuggestions] = useState(false);
 
   const filteredAttendances = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -93,6 +84,16 @@ export default function AdminScreen() {
       });
   }, [attendances, searchQuery, selectedFilter]);
 
+  const resetForm = () => {
+    setShowNewModal(false);
+    setLicensePlate("");
+    setVehicleModel("");
+    setServiceType("preventive");
+    setCustomerName("");
+    setCustomerPhone("");
+    setDescription("");
+  };
+
   const handleCreateAttendance = async () => {
     if (!licensePlate.trim()) {
       Alert.alert("Erro", "Por favor, informe a placa do veículo");
@@ -114,8 +115,6 @@ export default function AdminScreen() {
       return;
     }
 
-    setShowModelSuggestions(false);
-
     try {
       setSubmitting(true);
       await createAttendance({
@@ -132,15 +131,7 @@ export default function AdminScreen() {
       }
 
       Alert.alert("Sucesso!", `Atendimento criado para ${formatLicensePlate(licensePlate)}`, [{ text: "OK" }]);
-
-      setShowNewModal(false);
-      setLicensePlate("");
-      setVehicleModel("");
-      setServiceType("preventive");
-      setCustomerName("");
-      setCustomerPhone("");
-      setDescription("");
-      setVehicleModelSuggestions([]);
+      resetForm();
     } catch (error) {
       console.error("Erro ao criar atendimento:", error);
       Alert.alert("Erro", "Não foi possível criar o atendimento. Tente novamente.");
@@ -187,7 +178,7 @@ export default function AdminScreen() {
   };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor }]}> 
+    <ThemedView style={[styles.container, { backgroundColor }]}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
@@ -237,7 +228,7 @@ export default function AdminScreen() {
             const statusColor = getStatusColor(attendance.status);
 
             return (
-              <View key={attendance.id} style={[styles.card, { backgroundColor: cardBackground, borderColor }]}> 
+              <View key={attendance.id} style={[styles.card, { backgroundColor: cardBackground, borderColor }]}>
                 <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
 
                 <View style={styles.cardContent}>
@@ -250,7 +241,7 @@ export default function AdminScreen() {
                     </View>
 
                     <View style={styles.cardHeaderRight}>
-                      <View style={[styles.statusBadge, { backgroundColor: statusColor }]}> 
+                      <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
                         <ThemedText style={styles.statusBadgeText}>{STATUS_LABELS[attendance.status]}</ThemedText>
                       </View>
                       <ThemedText style={styles.elapsedTime}>{getElapsedTime(attendance.createdAt)}</ThemedText>
@@ -349,173 +340,28 @@ export default function AdminScreen() {
         <ThemedText style={styles.fabText}>+</ThemedText>
       </Pressable>
 
-      <Modal visible={showNewModal} animationType="slide" transparent onRequestClose={() => setShowNewModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContent,
-              {
-                backgroundColor,
-                paddingBottom: Math.max(insets.bottom, 20) + 20,
-              },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <ThemedText type="subtitle">Novo Atendimento</ThemedText>
-              <Pressable onPress={() => setShowNewModal(false)}>
-                <ThemedText style={styles.closeButton}>✕</ThemedText>
-              </Pressable>
-            </View>
-
-            <ScrollView style={styles.modalScroll}>
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Placa do Veículo *</ThemedText>
-                <TextInput
-                  style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
-                  value={licensePlate}
-                  onChangeText={setLicensePlate}
-                  placeholder="ABC-1234 ou ABC1D34"
-                  placeholderTextColor="#999"
-                  autoCapitalize="characters"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Modelo do Veículo *</ThemedText>
-                <TextInput
-                  style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
-                  value={vehicleModel}
-                  onChangeText={(text) => {
-                    setVehicleModel(text);
-                    if (text.trim()) {
-                      setVehicleModelSuggestions(searchVehicleModels(text));
-                      setShowModelSuggestions(true);
-                    } else {
-                      setShowModelSuggestions(false);
-                    }
-                  }}
-                  onFocus={() => {
-                    if (vehicleModel.trim()) {
-                      setShowModelSuggestions(true);
-                    }
-                  }}
-                  placeholder="Ex: VW Nivus Highline"
-                  placeholderTextColor="#999"
-                />
-                {showModelSuggestions && vehicleModelSuggestions.length > 0 ? (
-                  <View style={[styles.suggestionsContainer, { backgroundColor: cardBackground, borderColor }]}> 
-                    <ScrollView style={styles.suggestionsList} nestedScrollEnabled>
-                      {vehicleModelSuggestions.map((model, index) => (
-                        <Pressable
-                          key={index}
-                          style={styles.suggestionItem}
-                          onPress={() => {
-                            setVehicleModel(model);
-                            setShowModelSuggestions(false);
-                          }}
-                        >
-                          <ThemedText style={styles.suggestionText}>{model}</ThemedText>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  </View>
-                ) : null}
-              </View>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Tipo de Serviço *</ThemedText>
-                <View style={styles.serviceTypeContainer}>
-                  <Pressable
-                    style={[
-                      styles.serviceTypeButton,
-                      { backgroundColor: cardBackground, borderColor },
-                      serviceType === "tire" && { backgroundColor: tintColor, borderColor: tintColor },
-                    ]}
-                    onPress={() => setServiceType("tire")}
-                  >
-                    <ThemedText style={[styles.serviceTypeText, serviceType === "tire" && styles.serviceTypeTextActive]}>
-                      🔧 Pneu
-                    </ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.serviceTypeButton,
-                      { backgroundColor: cardBackground, borderColor },
-                      serviceType === "corrective" && { backgroundColor: tintColor, borderColor: tintColor },
-                    ]}
-                    onPress={() => setServiceType("corrective")}
-                  >
-                    <ThemedText style={[styles.serviceTypeText, serviceType === "corrective" && styles.serviceTypeTextActive]}>
-                      ⚠️ Corretiva
-                    </ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.serviceTypeButton,
-                      { backgroundColor: cardBackground, borderColor },
-                      serviceType === "preventive" && { backgroundColor: tintColor, borderColor: tintColor },
-                    ]}
-                    onPress={() => setServiceType("preventive")}
-                  >
-                    <ThemedText style={[styles.serviceTypeText, serviceType === "preventive" && styles.serviceTypeTextActive]}>
-                      ✓ Preventiva
-                    </ThemedText>
-                  </Pressable>
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Nome do Cliente</ThemedText>
-                <TextInput
-                  style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
-                  value={customerName}
-                  onChangeText={setCustomerName}
-                  placeholder="Opcional"
-                  placeholderTextColor="#999"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Telefone do Cliente (WhatsApp)</ThemedText>
-                <TextInput
-                  style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
-                  value={customerPhone}
-                  onChangeText={setCustomerPhone}
-                  placeholder="(11) 99999-9999"
-                  placeholderTextColor="#999"
-                  keyboardType="phone-pad"
-                />
-                <ThemedText style={styles.helperText}>Deixe em branco para não enviar notificações via WhatsApp</ThemedText>
-              </View>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Descrição</ThemedText>
-                <TextInput
-                  style={[styles.input, styles.textArea, { backgroundColor: cardBackground, borderColor }]}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Detalhes do atendimento (opcional)"
-                  placeholderTextColor="#999"
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
-
-              <Pressable
-                style={[
-                  styles.submitButton,
-                  { backgroundColor: tintColor },
-                  submitting && styles.submitButtonDisabled,
-                ]}
-                onPress={handleCreateAttendance}
-                disabled={submitting}
-              >
-                {submitting ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.submitButtonText}>Criar Atendimento</ThemedText>}
-              </Pressable>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <AdminCreateAttendanceModal
+        visible={showNewModal}
+        onClose={() => setShowNewModal(false)}
+        onSubmit={handleCreateAttendance}
+        backgroundColor={backgroundColor}
+        cardBackground={cardBackground}
+        borderColor={borderColor}
+        tintColor={tintColor}
+        submitting={submitting}
+        licensePlate={licensePlate}
+        setLicensePlate={setLicensePlate}
+        vehicleModel={vehicleModel}
+        setVehicleModel={setVehicleModel}
+        serviceType={serviceType}
+        setServiceType={setServiceType}
+        customerName={customerName}
+        setCustomerName={setCustomerName}
+        customerPhone={customerPhone}
+        setCustomerPhone={setCustomerPhone}
+        description={description}
+        setDescription={setDescription}
+      />
     </ThemedView>
   );
 }
@@ -607,64 +453,4 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   fabText: { color: "#FFFFFF", fontSize: 32, fontWeight: "300" },
-
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "flex-end" },
-  modalContent: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "90%" },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E1E4E8",
-  },
-  closeButton: { fontSize: 24, opacity: 0.6 },
-  modalScroll: { padding: 20 },
-  formGroup: { marginBottom: 20 },
-  label: { fontSize: 14, fontWeight: "600", marginBottom: 8 },
-  input: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
-  helperText: { fontSize: 12, opacity: 0.6, marginTop: 6 },
-  textArea: { minHeight: 100, textAlignVertical: "top" },
-  submitButton: { paddingVertical: 16, borderRadius: 8, alignItems: "center", marginTop: 8 },
-  submitButtonDisabled: { opacity: 0.6 },
-  submitButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
-
-  serviceTypeContainer: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  serviceTypeButton: {
-    flex: 1,
-    minWidth: 100,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  serviceTypeText: { fontSize: 14, fontWeight: "600" },
-  serviceTypeTextActive: { color: "#FFFFFF" },
-  serviceTypeBadgeAdmin: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(0, 102, 204, 0.1)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-  },
-  serviceTypeTextAdmin: { fontSize: 12, fontWeight: "700", color: "#0066CC" },
-
-  suggestionsContainer: {
-    borderWidth: 1,
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
-    maxHeight: 200,
-    marginTop: -8,
-    marginHorizontal: -1,
-  },
-  suggestionsList: { maxHeight: 200 },
-  suggestionItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 0, 0, 0.05)",
-  },
-  suggestionText: { fontSize: 14 },
 });
