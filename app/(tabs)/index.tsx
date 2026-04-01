@@ -1,14 +1,6 @@
-import {
-  StyleSheet,
-  View,
-  ScrollView,
-  Pressable,
-  Alert,
-  ActivityIndicator,
-  Platform,
-} from "react-native";
+import { StyleSheet, View, ScrollView, Pressable, Alert, ActivityIndicator, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as Haptics from "expo-haptics";
 import { AdminAttendanceCard } from "@/components/admin-attendance-card";
 import { AdminCreateAttendanceModal } from "@/components/admin-create-attendance-modal";
@@ -18,20 +10,10 @@ import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useAttendances } from "@/hooks/use-attendances";
 import type { Attendance, AttendanceStatus } from "@/types/attendance";
-import {
-  STATUS_LABELS,
-  SERVICE_TYPE_LABELS,
-  getNextStatus,
-  validateLicensePlate,
-  formatLicensePlate,
-} from "@/types/attendance";
+import { STATUS_LABELS, SERVICE_TYPE_LABELS, getNextStatus, validateLicensePlate, formatLicensePlate } from "@/types/attendance";
 
-const STATUS_SORT_ORDER: Record<AttendanceStatus, number> = {
-  arrival: 0,
-  waiting: 1,
-  in_service: 2,
-  completed: 3,
-};
+const STATUS_SORT_ORDER: Record<AttendanceStatus, number> = { arrival: 0, waiting: 1, in_service: 2, completed: 3 };
+type StatusFeedback = { title: string; detail: string };
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();
@@ -39,10 +21,7 @@ export default function AdminScreen() {
   const tintColor = useThemeColor({}, "tint");
   const cardBackground = useThemeColor({}, "cardBackground");
   const borderColor = useThemeColor({}, "border");
-
-  const { attendances, loading, createAttendance, updateAttendanceStatus, deleteAttendance } =
-    useAttendances();
-
+  const { attendances, loading, createAttendance, updateAttendanceStatus, deleteAttendance } = useAttendances();
   const [showNewModal, setShowNewModal] = useState(false);
   const [licensePlate, setLicensePlate] = useState("");
   const [vehicleModel, setVehicleModel] = useState("");
@@ -53,27 +32,31 @@ export default function AdminScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<AttendanceStatus | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
+
+  useEffect(() => {
+    if (!statusFeedback) return;
+    const timeout = setTimeout(() => setStatusFeedback(null), 2800);
+    return () => clearTimeout(timeout);
+  }, [statusFeedback]);
 
   const filteredAttendances = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-
+    const q = searchQuery.trim().toLowerCase();
     return attendances
-      .filter((attendance) => selectedFilter === "all" || attendance.status === selectedFilter)
-      .filter((attendance) => {
-        if (!normalizedQuery) return true;
-
+      .filter((a) => selectedFilter === "all" || a.status === selectedFilter)
+      .filter((a) => {
+        if (!q) return true;
         const haystack = [
-          attendance.licensePlate,
-          attendance.vehicleModel,
-          attendance.customerName || "",
-          attendance.description || "",
-          STATUS_LABELS[attendance.status] || attendance.status,
-          SERVICE_TYPE_LABELS[attendance.serviceType] || attendance.serviceType,
+          a.licensePlate,
+          a.vehicleModel,
+          a.customerName || "",
+          a.description || "",
+          STATUS_LABELS[a.status] || a.status,
+          SERVICE_TYPE_LABELS[a.serviceType] || a.serviceType,
         ]
           .join(" ")
           .toLowerCase();
-
-        return haystack.includes(normalizedQuery);
+        return haystack.includes(q);
       })
       .sort((a, b) => {
         const statusDelta = STATUS_SORT_ORDER[a.status] - STATUS_SORT_ORDER[b.status];
@@ -93,24 +76,11 @@ export default function AdminScreen() {
   };
 
   const handleCreateAttendance = async () => {
-    if (!licensePlate.trim()) {
-      Alert.alert("Erro", "Por favor, informe a placa do veículo");
-      return;
-    }
-
-    if (!validateLicensePlate(licensePlate)) {
-      Alert.alert("Erro", "Formato de placa inválido. Use ABC-1234 ou ABC1D34");
-      return;
-    }
-
-    if (!vehicleModel.trim()) {
-      Alert.alert("Erro", "Por favor, informe o modelo do veículo");
-      return;
-    }
-
+    if (!licensePlate.trim()) return Alert.alert("Erro", "Por favor, informe a placa do veículo");
+    if (!validateLicensePlate(licensePlate)) return Alert.alert("Erro", "Formato de placa inválido. Use ABC-1234 ou ABC1D34");
+    if (!vehicleModel.trim()) return Alert.alert("Erro", "Por favor, informe o modelo do veículo");
     if (customerPhone.trim() && !/^\d{10,15}$/.test(customerPhone.replace(/\D/g, ""))) {
-      Alert.alert("Erro", "Telefone inválido. Use apenas números (10-15 dígitos)");
-      return;
+      return Alert.alert("Erro", "Telefone inválido. Use apenas números (10-15 dígitos)");
     }
 
     try {
@@ -123,11 +93,11 @@ export default function AdminScreen() {
         customerPhone: customerPhone.trim() || undefined,
         description: description.trim() || undefined,
       });
-
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setStatusFeedback({
+        title: "Atendimento criado",
+        detail: `${formatLicensePlate(licensePlate)} entrou no fluxo operacional.`,
+      });
       Alert.alert("Sucesso!", `Atendimento criado para ${formatLicensePlate(licensePlate)}`, [{ text: "OK" }]);
       resetForm();
     } catch (error) {
@@ -141,19 +111,20 @@ export default function AdminScreen() {
   const handleUpdateStatus = async (attendance: Attendance) => {
     const nextStatus = getNextStatus(attendance.status);
     if (!nextStatus) {
-      Alert.alert(
+      return Alert.alert(
         "Atendimento concluído",
         `O atendimento de ${attendance.licensePlate} já está finalizado e continua salvo para histórico e relatórios.`,
         [{ text: "OK" }],
       );
-      return;
     }
 
     try {
       await updateAttendanceStatus(Number(attendance.id), nextStatus);
-      if (Platform.OS !== "web") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
+      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setStatusFeedback({
+        title: `${attendance.licensePlate} avançou`,
+        detail: `${STATUS_LABELS[attendance.status]} → ${STATUS_LABELS[nextStatus]}`,
+      });
     } catch {
       Alert.alert("Erro", "Não foi possível atualizar o status");
     }
@@ -162,30 +133,35 @@ export default function AdminScreen() {
   const handleDelete = async (id: string) => {
     try {
       await deleteAttendance(Number(id));
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
       Alert.alert("Erro", "Não foi possível remover o atendimento");
     }
   };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor }]}> 
+    <ThemedView style={[styles.container, { backgroundColor }]}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingTop: Math.max(insets.top, 20) + 20,
-            paddingBottom: Math.max(insets.bottom, 20) + 80,
-          },
+          { paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 80 },
         ]}
       >
         <View style={styles.header}>
           <ThemedText type="title">Painel Administrativo</ThemedText>
           <ThemedText style={styles.subtitle}>Gerencie os atendimentos em tempo real</ThemedText>
         </View>
+
+        {statusFeedback ? (
+          <View style={[styles.feedbackBanner, { backgroundColor: cardBackground, borderColor }]}>
+            <View style={[styles.feedbackDot, { backgroundColor: tintColor }]} />
+            <View style={styles.feedbackTextBlock}>
+              <ThemedText style={styles.feedbackTitle}>{statusFeedback.title}</ThemedText>
+              <ThemedText style={styles.feedbackDetail}>{statusFeedback.detail}</ThemedText>
+            </View>
+          </View>
+        ) : null}
 
         <AdminOverview
           attendances={attendances}
@@ -224,9 +200,7 @@ export default function AdminScreen() {
               tintColor={tintColor}
               onAdvance={() => handleUpdateStatus(attendance)}
               onDelete={() => {
-                if (Platform.OS !== "web") {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }
+                if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 Alert.alert(
                   "Remover Atendimento",
                   `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`,
@@ -246,13 +220,7 @@ export default function AdminScreen() {
       </ScrollView>
 
       <Pressable
-        style={[
-          styles.fab,
-          {
-            backgroundColor: tintColor,
-            bottom: Math.max(insets.bottom, 20) + 60,
-          },
-        ]}
+        style={[styles.fab, { backgroundColor: tintColor, bottom: Math.max(insets.bottom, 20) + 60 }]}
         onPress={() => setShowNewModal(true)}
       >
         <ThemedText style={styles.fabText}>+</ThemedText>
@@ -290,6 +258,20 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 20 },
   header: { marginBottom: 20 },
   subtitle: { fontSize: 16, opacity: 0.7, marginTop: 8 },
+  feedbackBanner: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  feedbackDot: { width: 12, height: 12, borderRadius: 6 },
+  feedbackTextBlock: { flex: 1 },
+  feedbackTitle: { fontSize: 14, fontWeight: "800", marginBottom: 4 },
+  feedbackDetail: { fontSize: 13, opacity: 0.72 },
   listHeader: { marginBottom: 14 },
   listTitle: { fontSize: 18, fontWeight: "700" },
   listSubtitle: { fontSize: 13, opacity: 0.65, marginTop: 4 },

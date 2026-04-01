@@ -9,6 +9,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useEffect } from "react";
+import { StatusProgressTrack } from "@/components/status-progress-track";
 import { ThemedText } from "@/components/themed-text";
 import type { Attendance } from "@/types/attendance";
 import { SERVICE_TYPE_ICONS, SERVICE_TYPE_LABELS } from "@/types/attendance";
@@ -117,6 +118,10 @@ export function LiveServiceSpotlight({ attendance }: LiveServiceSpotlightProps) 
               <ThemedText style={styles.metricValue}>{updatedLabel}</ThemedText>
             </View>
           </View>
+        </View>
+
+        <View style={styles.progressWrapper}>
+          <StatusProgressTrack status={attendance.status} accentColor="#00E5FF" lightText />
         </View>
 
         <View style={styles.bottomRow}>
@@ -249,6 +254,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "900",
   },
+  progressWrapper: { marginTop: 18 },
   bottomRow: {
     flexDirection: "row",
     flexWrap: "wrap",

@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, View } from "react-native";
+import { StatusProgressTrack } from "@/components/status-progress-track";
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import type { Attendance, AttendanceStatus } from "@/types/attendance";
@@ -124,6 +125,10 @@ export function AdminAttendanceCard({
           </View>
         </View>
 
+        <View style={styles.progressWrapper}>
+          <StatusProgressTrack status={attendance.status} accentColor={statusColor} compact />
+        </View>
+
         <View style={[styles.priorityPanel, { backgroundColor: priority.backgroundColor }]}>
           <ThemedText style={[styles.priorityTitle, { color: priority.textColor }]}>{priority.label}</ThemedText>
           <ThemedText style={styles.priorityHelper}>{priority.helper}</ThemedText>
@@ -219,6 +224,7 @@ const styles = StyleSheet.create({
   elapsedTime: { fontSize: 12, opacity: 0.65, fontWeight: "600" },
   statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
   statusBadgeText: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
+  progressWrapper: { marginBottom: 12 },
   priorityPanel: {
     borderRadius: 14,
     paddingHorizontal: 12,

@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useEffect } from "react";
+import { StatusProgressTrack } from "@/components/status-progress-track";
 import { ThemedText } from "./themed-text";
 import type { Attendance } from "@/types/attendance";
 import { STATUS_LABELS, SERVICE_TYPE_LABELS, SERVICE_TYPE_ICONS } from "@/types/attendance";
@@ -100,6 +101,10 @@ export function VehicleCard({ attendance, showAnimation = false }: VehicleCardPr
           <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
             <ThemedText style={styles.statusText}>{STATUS_LABELS[attendance.status]}</ThemedText>
           </View>
+        </View>
+
+        <View style={styles.progressWrapper}>
+          <StatusProgressTrack status={attendance.status} accentColor={statusColor} compact lightText />
         </View>
 
         <View style={styles.metaRow}>
@@ -224,11 +229,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.4,
   },
+  progressWrapper: { marginTop: 14, marginBottom: 2 },
   metaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
-    marginTop: 16,
+    marginTop: 14,
     alignItems: "center",
   },
   serviceTypeBadge: {
