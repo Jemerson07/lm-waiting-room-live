@@ -17,7 +17,8 @@ interface AdminAttendanceCardProps {
   borderColor: string;
   tintColor: string;
   onAdvance: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
+  canDelete?: boolean;
 }
 
 type PriorityMeta = {
@@ -93,6 +94,7 @@ export function AdminAttendanceCard({
   tintColor,
   onAdvance,
   onDelete,
+  canDelete = false,
 }: AdminAttendanceCardProps) {
   const nextStatus = getNextStatus(attendance.status);
   const isCompleted = !nextStatus;
@@ -146,6 +148,12 @@ export function AdminAttendanceCard({
               <ThemedText style={styles.customerChipText}>Cliente: {attendance.customerName}</ThemedText>
             </View>
           ) : null}
+
+          {!canDelete ? (
+            <View style={styles.permissionChip}>
+              <ThemedText style={styles.permissionChipText}>Exclusão: admin</ThemedText>
+            </View>
+          ) : null}
         </View>
 
         {attendance.description ? (
@@ -188,18 +196,20 @@ export function AdminAttendanceCard({
             </ThemedText>
           </Pressable>
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.deleteButton,
-              {
-                backgroundColor: pressed ? "rgba(255, 59, 48, 0.08)" : "transparent",
-                borderColor: "rgba(255, 59, 48, 0.45)",
-              },
-            ]}
-            onPress={onDelete}
-          >
-            <ThemedText style={styles.deleteButtonText}>Remover</ThemedText>
-          </Pressable>
+          {canDelete && onDelete ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.deleteButton,
+                {
+                  backgroundColor: pressed ? "rgba(255, 59, 48, 0.08)" : "transparent",
+                  borderColor: "rgba(255, 59, 48, 0.45)",
+                },
+              ]}
+              onPress={onDelete}
+            >
+              <ThemedText style={styles.deleteButtonText}>Remover</ThemedText>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </View>
@@ -249,6 +259,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   customerChipText: { fontSize: 12, fontWeight: "600", opacity: 0.8 },
+  permissionChip: {
+    backgroundColor: "rgba(255, 107, 0, 0.10)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  permissionChipText: { fontSize: 12, fontWeight: "700", color: "#B54708" },
   description: { fontSize: 14, opacity: 0.72, marginBottom: 12 },
   infoRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
   infoItem: {

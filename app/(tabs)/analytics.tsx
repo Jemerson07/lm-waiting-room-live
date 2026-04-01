@@ -39,8 +39,8 @@ export default function AnalyticsScreen() {
   const backgroundColor = useThemeColor({}, "background");
   const tintColor = useThemeColor({}, "tint");
   const cardBackground = useThemeColor({}, "cardBackground");
-  const { user, loading: userLoading } = useCurrentUser();
-  const { attendances, loading } = useAttendances({ scope: "manage", enabled: Boolean(user) });
+  const { user, isAdmin, loading: userLoading } = useCurrentUser();
+  const { attendances, loading } = useAttendances({ scope: "manage", enabled: Boolean(user && isAdmin) });
   const [startDate, setStartDate] = useState<string>(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [startTime, setStartTime] = useState<string>("00:00");
@@ -111,7 +111,7 @@ export default function AnalyticsScreen() {
     }
   };
 
-  if (userLoading || (user && loading)) {
+  if (userLoading || (user && isAdmin && loading)) {
     return <ThemedView style={[styles.container, { backgroundColor }]}><View style={styles.loadingContainer}><ActivityIndicator size="large" color={tintColor} /></View></ThemedView>;
   }
 
@@ -121,6 +121,17 @@ export default function AnalyticsScreen() {
         <ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}>
           <View style={styles.header}><ThemedText type="title">Relatório de Produtividade</ThemedText><ThemedText style={styles.subtitle}>Área protegida para análise operacional</ThemedText></View>
           <AccessRequiredCard />
+        </ScrollView>
+      </ThemedView>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor }]}> 
+        <ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}>
+          <View style={styles.header}><ThemedText type="title">Relatório de Produtividade</ThemedText><ThemedText style={styles.subtitle}>Área reservada à administração do sistema</ThemedText></View>
+          <AccessRequiredCard title="Somente administradores" description="Relatórios gerenciais e exportações avançadas exigem perfil de administrador." />
         </ScrollView>
       </ThemedView>
     );

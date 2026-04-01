@@ -16,7 +16,7 @@ export default function SettingsScreen() {
   const tintColor = useThemeColor({}, "tint");
   const cardBackground = useThemeColor({}, "cardBackground");
   const borderColor = useThemeColor({}, "border");
-  const { user, loading: userLoading } = useCurrentUser();
+  const { user, isAdmin, loading: userLoading } = useCurrentUser();
   const { settings, loading, saveSettings } = useCompanySettings();
 
   const [companyName, setCompanyName] = useState("");
@@ -91,7 +91,7 @@ export default function SettingsScreen() {
     ]);
   };
 
-  if (userLoading || (user && loading)) {
+  if (userLoading || (user && isAdmin && loading)) {
     return <ThemedView style={[styles.container, { backgroundColor }]}><View style={styles.loadingContainer}><ActivityIndicator size="large" color={tintColor} /></View></ThemedView>;
   }
 
@@ -106,16 +106,21 @@ export default function SettingsScreen() {
     );
   }
 
+  if (!isAdmin) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor }]}> 
+        <ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}>
+          <View style={styles.header}><ThemedText type="title">Configurações</ThemedText><ThemedText style={styles.subtitle}>Área reservada à administração do sistema</ThemedText></View>
+          <AccessRequiredCard title="Somente administradores" description="Alterações estruturais do sistema e dados da empresa exigem perfil de administrador." />
+        </ScrollView>
+      </ThemedView>
+    );
+  }
+
   return (
     <ThemedView style={[styles.container, { backgroundColor }]}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }]}
-      >
-        <View style={styles.header}>
-          <ThemedText type="title">Configurações</ThemedText>
-          <ThemedText style={styles.subtitle}>Personalize seu sistema de atendimento</ThemedText>
-        </View>
+      <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }]}>
+        <View style={styles.header}><ThemedText type="title">Configurações</ThemedText><ThemedText style={styles.subtitle}>Personalize seu sistema de atendimento</ThemedText></View>
 
         <View style={[styles.section, { backgroundColor: cardBackground }]}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>📋 Informações da Empresa</ThemedText>

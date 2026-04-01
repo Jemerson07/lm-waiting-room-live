@@ -1,7 +1,7 @@
 import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, operatorProcedure, publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
 
@@ -19,10 +19,10 @@ export const appRouter = router({
     liveList: publicProcedure.query(async () => {
       return db.getPublicLiveAttendances();
     }),
-    manageList: protectedProcedure.query(async () => {
+    manageList: operatorProcedure.query(async () => {
       return db.getAllAttendances();
     }),
-    create: protectedProcedure
+    create: operatorProcedure
       .input(
         z.object({
           licensePlate: z.string(),
@@ -36,7 +36,7 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         return db.createAttendance(input);
       }),
-    updateStatus: protectedProcedure
+    updateStatus: operatorProcedure
       .input(
         z.object({
           id: z.number(),
@@ -48,7 +48,7 @@ export const appRouter = router({
         await db.updateAttendanceStatusWithWhatsApp(input.id, input.status, input.sendWhatsApp);
         return { success: true };
       }),
-    delete: protectedProcedure
+    delete: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await db.deleteAttendance(input.id);

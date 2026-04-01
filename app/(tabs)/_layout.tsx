@@ -10,7 +10,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
-  const { isAuthenticated } = useCurrentUser();
+  const { isAuthenticated, isAdmin, isOperator } = useCurrentUser();
 
   return (
     <Tabs
@@ -28,7 +28,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Admin",
-          href: isAuthenticated ? undefined : null,
+          href: isAuthenticated && isOperator ? undefined : null,
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="clipboard.fill" color={color} />,
         }}
       />
@@ -43,7 +43,7 @@ export default function TabLayout() {
         name="analytics"
         options={{
           title: "Relatório",
-          href: isAuthenticated ? undefined : null,
+          href: isAuthenticated && isAdmin ? undefined : null,
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.bar.fill" color={color} />,
         }}
       />
@@ -51,7 +51,7 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: "Configurações",
-          href: isAuthenticated ? undefined : null,
+          href: isAuthenticated && isAdmin ? undefined : null,
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
         }}
       />

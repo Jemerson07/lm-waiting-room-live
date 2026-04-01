@@ -23,10 +23,10 @@ export default function AdminScreen() {
   const tintColor = useThemeColor({}, "tint");
   const cardBackground = useThemeColor({}, "cardBackground");
   const borderColor = useThemeColor({}, "border");
-  const { user, loading: userLoading } = useCurrentUser();
+  const { user, roleLabel, isAdmin, isOperator, loading: userLoading } = useCurrentUser();
   const { attendances, loading, createAttendance, updateAttendanceStatus, deleteAttendance } = useAttendances({
     scope: "manage",
-    enabled: Boolean(user),
+    enabled: Boolean(user && isOperator),
   });
 
   const [showNewModal, setShowNewModal] = useState(false);
@@ -170,6 +170,20 @@ export default function AdminScreen() {
     );
   }
 
+  if (!isOperator) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor }]}> 
+        <ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}>
+          <View style={styles.header}>
+            <ThemedText type="title">Painel Administrativo</ThemedText>
+            <ThemedText style={styles.subtitle}>Seu perfil atual não possui acesso operacional.</ThemedText>
+          </View>
+          <AccessRequiredCard title="Permissão insuficiente" description="Este painel é destinado a operadores e administradores do sistema." />
+        </ScrollView>
+      </ThemedView>
+    );
+  }
+
   return (
     <ThemedView style={[styles.container, { backgroundColor }]}>
       <ScrollView
@@ -180,8 +194,15 @@ export default function AdminScreen() {
         ]}
       >
         <View style={styles.header}>
-          <ThemedText type="title">Painel Administrativo</ThemedText>
-          <ThemedText style={styles.subtitle}>Gerencie os atendimentos em tempo real</ThemedText>
+          <View style={styles.headerRow}>
+            <View style={styles.headerTextBlock}>
+              <ThemedText type="title">Painel Administrativo</ThemedText>
+              <ThemedText style={styles.subtitle}>Gerencie os atendimentos em tempo real</ThemedText>
+            </View>
+            <View style={[styles.roleBadge, { backgroundColor: isAdmin ? "rgba(0, 200, 83, 0.12)" : "rgba(0, 82, 163, 0.10)" }]}>
+              <ThemedText style={[styles.roleBadgeText, { color: isAdmin ? "#1C7C54" : "#0052A3" }]}>{roleLabel}</ThemedText>
+            </View>
+          </View>
         </View>
 
         {statusFeedback ? (
@@ -229,18 +250,23 @@ export default function AdminScreen() {
               cardBackground={cardBackground}
               borderColor={borderColor}
               tintColor={tintColor}
+              canDelete={isAdmin}
               onAdvance={() => handleUpdateStatus(attendance)}
-              onDelete={() => {
-                if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                Alert.alert(
-                  "Remover Atendimento",
-                  `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`,
-                  [
-                    { text: "Manter", style: "cancel" },
-                    { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) },
-                  ],
-                );
-              }}
+              onDelete={
+                isAdmin
+                  ? () => {
+                      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      Alert.alert(
+                        "Remover Atendimento",
+                        `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`,
+                        [
+                          { text: "Manter", style: "cancel" },
+                          { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) },
+                        ],
+                      );
+                    }
+                  : undefined
+              }
             />
           ))
         )}
@@ -284,7 +310,11 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 20 },
   header: { marginBottom: 20, paddingHorizontal: 20 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
+  headerTextBlock: { flex: 1 },
   subtitle: { fontSize: 16, opacity: 0.7, marginTop: 8 },
+  roleBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, marginTop: 4 },
+  roleBadgeText: { fontSize: 12, fontWeight: "800" },
   feedbackBanner: {
     borderRadius: 16,
     borderWidth: 1,
