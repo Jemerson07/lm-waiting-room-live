@@ -33,7 +33,7 @@ function toTimestamp(value: string | number | Date): number {
 
 export default function LiveScreen() {
   const insets = useSafeAreaInsets();
-  const { attendances, loading, reload } = useAttendances();
+  const { attendances, loading, reload } = useAttendances({ scope: "live" });
   const { settings } = useCompanySettings();
   const [refreshing, setRefreshing] = useState(false);
   const refreshInterval = Math.max(settings.autoRefreshInterval || 3, 1);

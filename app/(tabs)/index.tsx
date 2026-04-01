@@ -2,11 +2,13 @@ import { StyleSheet, View, ScrollView, Pressable, Alert, ActivityIndicator, Plat
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEffect, useMemo, useState } from "react";
 import * as Haptics from "expo-haptics";
+import { AccessRequiredCard } from "@/components/access-required-card";
 import { AdminAttendanceCard } from "@/components/admin-attendance-card";
 import { AdminCreateAttendanceModal } from "@/components/admin-create-attendance-modal";
 import { AdminOverview } from "@/components/admin-overview";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useAttendances } from "@/hooks/use-attendances";
 import type { Attendance, AttendanceStatus } from "@/types/attendance";
@@ -21,7 +23,12 @@ export default function AdminScreen() {
   const tintColor = useThemeColor({}, "tint");
   const cardBackground = useThemeColor({}, "cardBackground");
   const borderColor = useThemeColor({}, "border");
-  const { attendances, loading, createAttendance, updateAttendanceStatus, deleteAttendance } = useAttendances();
+  const { user, loading: userLoading } = useCurrentUser();
+  const { attendances, loading, createAttendance, updateAttendanceStatus, deleteAttendance } = useAttendances({
+    scope: "manage",
+    enabled: Boolean(user),
+  });
+
   const [showNewModal, setShowNewModal] = useState(false);
   const [licensePlate, setLicensePlate] = useState("");
   const [vehicleModel, setVehicleModel] = useState("");
@@ -139,6 +146,30 @@ export default function AdminScreen() {
     }
   };
 
+  if (userLoading) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={tintColor} />
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (!user) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor }]}> 
+        <ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}>
+          <View style={styles.header}>
+            <ThemedText type="title">Painel Administrativo</ThemedText>
+            <ThemedText style={styles.subtitle}>Área protegida para operação e gestão dos atendimentos</ThemedText>
+          </View>
+          <AccessRequiredCard />
+        </ScrollView>
+      </ThemedView>
+    );
+  }
+
   return (
     <ThemedView style={[styles.container, { backgroundColor }]}>
       <ScrollView
@@ -206,11 +237,7 @@ export default function AdminScreen() {
                   `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`,
                   [
                     { text: "Manter", style: "cancel" },
-                    {
-                      text: "Remover",
-                      style: "destructive",
-                      onPress: () => handleDelete(attendance.id),
-                    },
+                    { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) },
                   ],
                 );
               }}
@@ -256,7 +283,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 20 },
-  header: { marginBottom: 20 },
+  header: { marginBottom: 20, paddingHorizontal: 20 },
   subtitle: { fontSize: 16, opacity: 0.7, marginTop: 8 },
   feedbackBanner: {
     borderRadius: 16,

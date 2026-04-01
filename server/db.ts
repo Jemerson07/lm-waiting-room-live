@@ -5,7 +5,6 @@ import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -30,9 +29,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   }
 
   try {
-    const values: InsertUser = {
-      openId: user.openId,
-    };
+    const values: InsertUser = { openId: user.openId };
     const updateSet: Record<string, unknown> = {};
 
     const textFields = ["name", "email", "loginMethod"] as const;
@@ -68,9 +65,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
+    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -85,11 +80,8 @@ export async function getUserByOpenId(openId: string) {
   }
 
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-
   return result.length > 0 ? result[0] : undefined;
 }
-
-// Funções para gerenciar atendimentos
 
 export async function getAllAttendances() {
   const db = await getDb();
@@ -99,8 +91,29 @@ export async function getAllAttendances() {
   }
 
   const { attendances } = await import("../drizzle/schema");
-  const result = await db.select().from(attendances);
-  return result;
+  return db.select().from(attendances);
+}
+
+export async function getPublicLiveAttendances() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get public attendances: database not available");
+    return [];
+  }
+
+  const { attendances } = await import("../drizzle/schema");
+  return db
+    .select({
+      id: attendances.id,
+      licensePlate: attendances.licensePlate,
+      vehicleModel: attendances.vehicleModel,
+      customerName: attendances.customerName,
+      status: attendances.status,
+      serviceType: attendances.serviceType,
+      createdAt: attendances.createdAt,
+      updatedAt: attendances.updatedAt,
+    })
+    .from(attendances);
 }
 
 export async function createAttendance(data: {
@@ -117,7 +130,7 @@ export async function createAttendance(data: {
   }
 
   const { attendances } = await import("../drizzle/schema");
-  const result = await db.insert(attendances).values({
+  return db.insert(attendances).values({
     licensePlate: data.licensePlate,
     vehicleModel: data.vehicleModel,
     serviceType: data.serviceType,
@@ -127,8 +140,6 @@ export async function createAttendance(data: {
     status: "arrival",
     whatsappNotificationSent: "none",
   });
-
-  return result;
 }
 
 export async function updateAttendanceStatus(id: number, status: "arrival" | "waiting" | "in_service" | "completed") {
@@ -151,11 +162,10 @@ export async function deleteAttendance(id: number) {
   await db.delete(attendances).where(eq(attendances.id, id));
 }
 
-
 export async function updateAttendanceStatusWithWhatsApp(
   id: number,
   status: "arrival" | "waiting" | "in_service" | "completed",
-  sendWhatsApp: boolean = true
+  sendWhatsApp: boolean = true,
 ) {
   const db = await getDb();
   if (!db) {
@@ -165,7 +175,6 @@ export async function updateAttendanceStatusWithWhatsApp(
   const { attendances } = await import("../drizzle/schema");
   const { sendStatusNotification } = await import("./whatsapp-service");
 
-  // Buscar dados do atendimento
   const result = await db.select().from(attendances).where(eq(attendances.id, id));
   const attendance = result[0];
 
@@ -173,24 +182,20 @@ export async function updateAttendanceStatusWithWhatsApp(
     throw new Error("Attendance not found");
   }
 
-  // Atualizar status
   await db.update(attendances).set({ status }).where(eq(attendances.id, id));
 
-  // Enviar notificacao WhatsApp se habilitado e telefone disponivel
   if (sendWhatsApp && attendance.customerPhone) {
     try {
       await sendStatusNotification(
         attendance.customerPhone,
         status,
         attendance.licensePlate,
-        attendance.customerName || undefined
+        attendance.customerName || undefined,
       );
 
-      // Marcar que notificacao foi enviada
       await db.update(attendances).set({ whatsappNotificationSent: status }).where(eq(attendances.id, id));
     } catch (error) {
       console.error("[WhatsApp] Erro ao enviar notificacao:", error);
-      // Nao falha a operacao se WhatsApp falhar
     }
   }
 }

@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
 import React from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
@@ -10,6 +10,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
+  const { isAuthenticated } = useCurrentUser();
 
   return (
     <Tabs
@@ -27,6 +28,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Admin",
+          href: isAuthenticated ? undefined : null,
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="clipboard.fill" color={color} />,
         }}
       />
@@ -41,6 +43,7 @@ export default function TabLayout() {
         name="analytics"
         options={{
           title: "Relatório",
+          href: isAuthenticated ? undefined : null,
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.bar.fill" color={color} />,
         }}
       />
@@ -48,6 +51,7 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: "Configurações",
+          href: isAuthenticated ? undefined : null,
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
         }}
       />

@@ -2,36 +2,53 @@ import { useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import type { AttendanceStatus } from "@/types/attendance";
 
-export function useAttendances() {
+type AttendanceScope = "manage" | "live";
+
+interface UseAttendancesOptions {
+  scope?: AttendanceScope;
+  enabled?: boolean;
+}
+
+export function useAttendances(options: UseAttendancesOptions = {}) {
+  const { scope = "manage", enabled = true } = options;
   const utils = trpc.useUtils();
 
-  // Query para listar atendimentos
-  const { data: attendances = [], isLoading: loading } = trpc.attendances.list.useQuery(undefined, {
-    refetchInterval: 3000, // Atualizar a cada 3 segundos
+  const liveQuery = trpc.attendances.liveList.useQuery(undefined, {
+    enabled: enabled && scope === "live",
+    refetchInterval: scope === "live" ? 3000 : false,
   });
 
-  // Mutation para criar atendimento
+  const manageQuery = trpc.attendances.manageList.useQuery(undefined, {
+    enabled: enabled && scope === "manage",
+    refetchInterval: scope === "manage" ? 3000 : false,
+    retry: false,
+  });
+
+  const query = scope === "live" ? liveQuery : manageQuery;
+  const attendances = query.data ?? [];
+  const loading = enabled ? query.isLoading : false;
+
   const createMutation = trpc.attendances.create.useMutation({
     onSuccess: () => {
-      utils.attendances.list.invalidate();
+      utils.attendances.manageList.invalidate();
+      utils.attendances.liveList.invalidate();
     },
   });
 
-  // Mutation para atualizar status
   const updateStatusMutation = trpc.attendances.updateStatus.useMutation({
     onSuccess: () => {
-      utils.attendances.list.invalidate();
+      utils.attendances.manageList.invalidate();
+      utils.attendances.liveList.invalidate();
     },
   });
 
-  // Mutation para deletar atendimento
   const deleteMutation = trpc.attendances.delete.useMutation({
     onSuccess: () => {
-      utils.attendances.list.invalidate();
+      utils.attendances.manageList.invalidate();
+      utils.attendances.liveList.invalidate();
     },
   });
 
-  // Função para criar atendimento
   const createAttendance = useCallback(
     async (data: {
       licensePlate: string;
@@ -43,40 +60,40 @@ export function useAttendances() {
     }) => {
       await createMutation.mutateAsync(data);
     },
-    [createMutation]
+    [createMutation],
   );
 
-  // Função para atualizar status
   const updateAttendanceStatus = useCallback(
     async (id: number, status: AttendanceStatus) => {
       await updateStatusMutation.mutateAsync({ id, status });
     },
-    [updateStatusMutation]
+    [updateStatusMutation],
   );
 
-  // Função para deletar atendimento
   const deleteAttendance = useCallback(
     async (id: number) => {
       await deleteMutation.mutateAsync({ id });
     },
-    [deleteMutation]
+    [deleteMutation],
   );
 
-  // Função para forçar reload
   const reload = useCallback(() => {
-    utils.attendances.list.invalidate();
-  }, [utils]);
+    if (scope === "live") {
+      utils.attendances.liveList.invalidate();
+      return;
+    }
+    utils.attendances.manageList.invalidate();
+  }, [scope, utils]);
 
-  // Converter timestamps do banco para formato do tipo Attendance
   const formattedAttendances = attendances.map((att) => ({
     id: String(att.id),
     licensePlate: att.licensePlate,
     vehicleModel: att.vehicleModel,
     customerName: att.customerName ?? undefined,
-    customerPhone: att.customerPhone ?? undefined,
+    customerPhone: "customerPhone" in att ? att.customerPhone ?? undefined : undefined,
     status: att.status as AttendanceStatus,
     serviceType: att.serviceType as "tire" | "corrective" | "preventive",
-    description: att.description ?? undefined,
+    description: "description" in att ? att.description ?? undefined : undefined,
     createdAt: new Date(att.createdAt).getTime(),
     updatedAt: new Date(att.updatedAt).getTime(),
   }));
