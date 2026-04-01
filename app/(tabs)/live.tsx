@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { CompletedVehiclesPanel } from "@/components/completed-vehicles-panel";
+import { LiveServiceSpotlight } from "@/components/live-service-spotlight";
 import { NivusBackground } from "@/components/nivus-background";
 import { VehicleCard } from "@/components/vehicle-card";
 import { LiveHeader } from "@/components/live-header";
 import { useAttendances } from "@/hooks/use-attendances";
 import { useCompanySettings } from "@/hooks/use-company-settings";
-import type { AttendanceStatus } from "@/types/attendance";
+import type { Attendance, AttendanceStatus } from "@/types/attendance";
 import { STATUS_LABELS } from "@/types/attendance";
 
 const { width } = Dimensions.get("window");
@@ -18,9 +19,16 @@ const RECENT_COMPLETED_LIMIT = 6;
 const STATUS_MESSAGES: Record<AttendanceStatus, string> = {
   arrival: "Seu veículo chegou e já entrou no fluxo de atendimento.",
   waiting: "Estamos organizando a fila e em breve iniciaremos o serviço.",
-  in_service: "Seu veículo está em manutenção neste momento.",
+  in_service: "Outros veículos em manutenção neste momento.",
   completed: "Atendimento concluído com sucesso. Obrigado pela confiança.",
 };
+
+function toTimestamp(value: string | number | Date): number {
+  if (typeof value === "number") return value;
+  if (value instanceof Date) return value.getTime();
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : new Date(value).getTime();
+}
 
 export default function LiveScreen() {
   const insets = useSafeAreaInsets();
@@ -47,6 +55,17 @@ export default function LiveScreen() {
     completed: attendances.filter((a) => a.status === "completed"),
   };
 
+  const sortedInService = useMemo(
+    () => [...grouped.in_service].sort((a, b) => toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt)),
+    [grouped.in_service],
+  );
+
+  const spotlightAttendance: Attendance | null = sortedInService[0] || null;
+  const inServiceQueue = useMemo(
+    () => sortedInService.filter((attendance) => attendance.id !== spotlightAttendance?.id),
+    [sortedInService, spotlightAttendance],
+  );
+
   const active = useMemo(() => STATUS_ORDER.flatMap((status) => grouped[status]), [grouped]);
   const recentCompleted = useMemo(
     () => [...grouped.completed].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, RECENT_COMPLETED_LIMIT),
@@ -62,8 +81,10 @@ export default function LiveScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingTop: 8, paddingBottom: Math.max(insets.bottom, 20) + 28 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" />}
       >
+        {spotlightAttendance ? <LiveServiceSpotlight attendance={spotlightAttendance} /> : null}
+
         {STATUS_ORDER.map((status) => {
-          const items = grouped[status];
+          const items = status === "in_service" ? inServiceQueue : grouped[status];
           if (!items.length) return null;
           return (
             <View key={status} style={styles.section}>
