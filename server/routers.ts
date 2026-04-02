@@ -5,6 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, operatorProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
+import { getOperationalMetrics } from "./operational-metrics";
 
 function toHistoryActor(user: { id: number; role: string }) {
   return {
@@ -58,6 +59,16 @@ export const appRouter = router({
       )
       .query(async ({ input }) => {
         return db.getAttendanceHistory(input.attendanceId);
+      }),
+    metrics: operatorProcedure
+      .input(
+        z.object({
+          startAt: z.date().optional(),
+          endAt: z.date().optional(),
+        }).optional(),
+      )
+      .query(async ({ input }) => {
+        return getOperationalMetrics({ startAt: input?.startAt, endAt: input?.endAt });
       }),
     create: operatorProcedure
       .input(

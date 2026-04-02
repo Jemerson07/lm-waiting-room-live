@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import { AccessRequiredCard } from "@/components/access-required-card";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { trpc } from "@/lib/trpc";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useAttendances } from "@/hooks/use-attendances";
 import { exportAttendancesToCSV, exportProductivityReportToCSV, exportServiceTypeReportToCSV, downloadCSV, generateFilename } from "@/lib/csv-export";
+import { CRITICAL_QUEUE_SEVERITY_LABELS, STATUS_LABELS } from "@/types/attendance";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -39,6 +41,7 @@ export default function AnalyticsScreen() {
   const backgroundColor = useThemeColor({}, "background");
   const tintColor = useThemeColor({}, "tint");
   const cardBackground = useThemeColor({}, "cardBackground");
+  const borderColor = useThemeColor({}, "border");
   const { user, isAdmin, loading: userLoading } = useCurrentUser();
   const { attendances, loading } = useAttendances({ scope: "manage", enabled: Boolean(user && isAdmin) });
   const [startDate, setStartDate] = useState<string>(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
@@ -46,13 +49,20 @@ export default function AnalyticsScreen() {
   const [startTime, setStartTime] = useState<string>("00:00");
   const [endTime, setEndTime] = useState<string>("23:59");
 
+  const dateRange = useMemo(() => toDateTimeRange(startDate, startTime, endDate, endTime), [startDate, startTime, endDate, endTime]);
+
   const filteredAttendances = useMemo(() => {
-    const { start, end } = toDateTimeRange(startDate, startTime, endDate, endTime);
+    const { start, end } = dateRange;
     return attendances.filter((att) => {
       const createdAt = new Date(att.createdAt);
       return createdAt >= start && createdAt <= end;
     });
-  }, [attendances, startDate, startTime, endDate, endTime]);
+  }, [attendances, dateRange]);
+
+  const { data: operationalMetrics } = trpc.attendances.metrics.useQuery(
+    { startAt: dateRange.start, endAt: dateRange.end },
+    { enabled: Boolean(user && isAdmin), retry: false },
+  );
 
   const totals = useMemo(() => {
     const total = filteredAttendances.length;
@@ -80,9 +90,16 @@ export default function AnalyticsScreen() {
     { title: "Em atendimento", value: totals.inService, color: "#FF6B00", icon: "⚙️" },
     { title: "Aguardando", value: totals.waiting, color: "#FFA000", icon: "⏳" },
     { title: "Chegada", value: totals.arrival, color: "#0091EA", icon: "🚗" },
-    { title: "Tempo médio concluído", value: `${totals.avgCompletedMinutes} min`, subtitle: "Da criação até a última atualização", color: "#0052A3", icon: "📌" },
-    { title: "Tempo médio ativo", value: `${totals.avgActiveMinutes} min`, subtitle: "Tempo atual dos atendimentos abertos", color: "#7B1FA2", icon: "⏱️" },
-  ], [totals, tintColor]);
+    { title: "Tempo médio concluído", value: `${operationalMetrics?.averageTotalMinutesCompleted ?? totals.avgCompletedMinutes} min`, subtitle: "Com base no histórico real", color: "#0052A3", icon: "📌" },
+    { title: "Fila crítica", value: operationalMetrics?.criticalQueueCount ?? 0, subtitle: "Atendimentos acima do tempo alvo", color: (operationalMetrics?.criticalQueueCount ?? 0) > 0 ? "#B54708" : "#00C853", icon: "🚨" },
+  ], [operationalMetrics, tintColor, totals]);
+
+  const stageMetrics: MetricCard[] = useMemo(() => [
+    { title: "Chegada", value: `${operationalMetrics?.averageArrivalMinutes ?? 0} min`, subtitle: "Tempo médio até próxima etapa", color: "#0091EA", icon: "🚗" },
+    { title: "Aguardando", value: `${operationalMetrics?.averageWaitingMinutes ?? 0} min`, subtitle: "Tempo médio de fila", color: "#FFA000", icon: "⏳" },
+    { title: "Em atendimento", value: `${operationalMetrics?.averageInServiceMinutes ?? 0} min`, subtitle: "Tempo médio de execução", color: "#FF6B00", icon: "🛠️" },
+    { title: "Gargalo atual", value: operationalMetrics?.bottleneckStage ? STATUS_LABELS[operationalMetrics.bottleneckStage] : "Sem dados", subtitle: operationalMetrics?.bottleneckAverageMinutes ? `${operationalMetrics.bottleneckAverageMinutes} min de média` : "Aguardando mais histórico", color: "#7B1FA2", icon: "📍" },
+  ], [operationalMetrics]);
 
   const handleExportAttendances = async () => {
     try {
@@ -168,6 +185,19 @@ export default function AnalyticsScreen() {
           ))}
         </View>
 
+        <View style={[styles.stageSurface, { backgroundColor: cardBackground }]}> 
+          <ThemedText type="subtitle" style={styles.stageTitle}>Tempos reais por etapa</ThemedText>
+          <View style={styles.stageGrid}>
+            {stageMetrics.map((metric) => (
+              <View key={metric.title} style={styles.stageCard}>
+                <ThemedText style={styles.stageCardLabel}>{metric.icon} {metric.title}</ThemedText>
+                <ThemedText style={[styles.stageCardValue, { color: metric.color }]}>{metric.value}</ThemedText>
+                {metric.subtitle ? <ThemedText style={styles.stageCardSubtitle}>{metric.subtitle}</ThemedText> : null}
+              </View>
+            ))}
+          </View>
+        </View>
+
         <View style={styles.exportSection}>
           <ThemedText type="subtitle" style={styles.exportTitle}>Exportar relatórios</ThemedText>
           <View style={styles.exportButtons}>
@@ -183,11 +213,37 @@ export default function AnalyticsScreen() {
           <View style={styles.divider} />
           <View style={styles.summaryRow}><ThemedText style={styles.summaryLabel}>Taxa de conclusão</ThemedText><ThemedText style={[styles.summaryValue, { color: totals.completionRate >= 80 ? "#00C853" : totals.completionRate > 0 ? "#FFA500" : "#999" }]}>{totals.completionRate}%</ThemedText></View>
           <View style={styles.divider} />
-          <View style={styles.summaryRow}><ThemedText style={styles.summaryLabel}>Tempo médio concluído</ThemedText><ThemedText style={styles.summaryValue}>{totals.avgCompletedMinutes} min</ThemedText></View>
-          <View style={styles.divider} />
-          <View style={styles.summaryRow}><ThemedText style={styles.summaryLabel}>Tempo médio ativo</ThemedText><ThemedText style={styles.summaryValue}>{totals.avgActiveMinutes} min</ThemedText></View>
+          <View style={styles.summaryRow}><ThemedText style={styles.summaryLabel}>Concluídos medidos</ThemedText><ThemedText style={styles.summaryValue}>{operationalMetrics?.completedMeasuredCount ?? 0}</ThemedText></View>
           <View style={styles.divider} />
           <View style={styles.summaryRow}><ThemedText style={styles.summaryLabel}>Distribuição de serviço</ThemedText><ThemedText style={styles.summaryValue}>🔧 {totals.tireCount} | ⚠️ {totals.correctiveCount} | ✓ {totals.preventiveCount}</ThemedText></View>
+        </View>
+
+        <View style={[styles.criticalSurface, { backgroundColor: cardBackground }]}> 
+          <ThemedText type="subtitle" style={styles.criticalTitle}>Gargalos e fila em risco</ThemedText>
+          <ThemedText style={styles.criticalSubtitle}>
+            Chegada {operationalMetrics?.criticalByStatus.arrival ?? 0} · Aguardando {operationalMetrics?.criticalByStatus.waiting ?? 0} · Em atendimento {operationalMetrics?.criticalByStatus.in_service ?? 0}
+          </ThemedText>
+
+          {operationalMetrics?.criticalAttendances?.length ? (
+            operationalMetrics.criticalAttendances.map((item) => (
+              <View key={item.attendanceId} style={[styles.criticalItem, { borderColor }]}> 
+                <View style={styles.criticalItemHeader}>
+                  <View>
+                    <ThemedText style={styles.criticalPlate}>{item.licensePlate}</ThemedText>
+                    <ThemedText style={styles.criticalVehicle}>{item.vehicleModel}</ThemedText>
+                  </View>
+                  <View style={[styles.criticalBadge, { backgroundColor: item.severity === "critical" ? "rgba(179,38,30,0.12)" : "rgba(181,71,8,0.12)" }]}>
+                    <ThemedText style={[styles.criticalBadgeText, { color: item.severity === "critical" ? "#B3261E" : "#B54708" }]}>{CRITICAL_QUEUE_SEVERITY_LABELS[item.severity]}</ThemedText>
+                  </View>
+                </View>
+                <ThemedText style={styles.criticalDetails}>{STATUS_LABELS[item.status]} há {item.stageDurationMinutes} min · alvo {item.thresholdMinutes} min</ThemedText>
+              </View>
+            ))
+          ) : (
+            <View style={[styles.noCriticalSurface, { borderColor }]}> 
+              <ThemedText style={styles.noCriticalText}>Nenhum atendimento acima do tempo alvo neste período filtrado.</ThemedText>
+            </View>
+          )}
         </View>
       </ScrollView>
     </ThemedView>
@@ -207,6 +263,13 @@ const styles = StyleSheet.create({
   metricTitle: { fontSize: 12, opacity: 0.6, flex: 1 },
   metricValue: { fontSize: 28, fontWeight: "700", marginBottom: 4 },
   metricSubtitle: { fontSize: 11, opacity: 0.5 },
+  stageSurface: { borderRadius: 16, padding: 20, marginBottom: 20 },
+  stageTitle: { fontSize: 18, fontWeight: "600", marginBottom: 16 },
+  stageGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  stageCard: { width: (SCREEN_WIDTH - 76) / 2, backgroundColor: "rgba(0,0,0,0.03)", borderRadius: 14, padding: 14 },
+  stageCardLabel: { fontSize: 12, opacity: 0.65, marginBottom: 8, fontWeight: "700" },
+  stageCardValue: { fontSize: 22, fontWeight: "800", marginBottom: 6 },
+  stageCardSubtitle: { fontSize: 11, opacity: 0.6, lineHeight: 17 },
   summarySection: { borderRadius: 16, padding: 20, marginBottom: 20 },
   summaryTitle: { fontSize: 18, fontWeight: "600", marginBottom: 16 },
   summaryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12 },
@@ -226,4 +289,16 @@ const styles = StyleSheet.create({
   filterLabel: { fontSize: 12, opacity: 0.7, marginBottom: 6, fontWeight: "500" },
   input: { borderWidth: 1, borderColor: "rgba(0, 0, 0, 0.2)", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: "#333" },
   filterInfo: { fontSize: 13, opacity: 0.7, marginTop: 12, fontWeight: "500" },
+  criticalSurface: { borderRadius: 16, padding: 20, marginBottom: 20 },
+  criticalTitle: { fontSize: 18, fontWeight: "600", marginBottom: 6 },
+  criticalSubtitle: { fontSize: 13, opacity: 0.7, marginBottom: 14 },
+  criticalItem: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 10 },
+  criticalItemHeader: { flexDirection: "row", justifyContent: "space-between", gap: 10, marginBottom: 6, alignItems: "center" },
+  criticalPlate: { fontSize: 16, fontWeight: "800" },
+  criticalVehicle: { fontSize: 12, opacity: 0.66 },
+  criticalBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  criticalBadgeText: { fontSize: 11, fontWeight: "800" },
+  criticalDetails: { fontSize: 13, lineHeight: 20 },
+  noCriticalSurface: { borderWidth: 1, borderRadius: 14, padding: 14 },
+  noCriticalText: { fontSize: 13, opacity: 0.72 },
 });

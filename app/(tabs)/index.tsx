@@ -9,6 +9,7 @@ import { AdminOverview } from "@/components/admin-overview";
 import { AttendanceHistoryModal } from "@/components/attendance-history-modal";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { trpc } from "@/lib/trpc";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useAttendances } from "@/hooks/use-attendances";
@@ -28,6 +29,11 @@ export default function AdminScreen() {
   const { attendances, loading, createAttendance, updateAttendanceStatus, deleteAttendance } = useAttendances({
     scope: "manage",
     enabled: Boolean(user && isOperator),
+  });
+  const { data: operationalMetrics } = trpc.attendances.metrics.useQuery(undefined, {
+    enabled: Boolean(user && isOperator),
+    retry: false,
+    refetchInterval: 5000,
   });
 
   const [showNewModal, setShowNewModal] = useState(false);
@@ -222,6 +228,7 @@ export default function AdminScreen() {
 
         <AdminOverview
           attendances={attendances}
+          operationalMetrics={operationalMetrics}
           selectedFilter={selectedFilter}
           onFilterChange={setSelectedFilter}
           searchQuery={searchQuery}

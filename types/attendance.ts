@@ -6,6 +6,7 @@ export type AttendanceStatus = "arrival" | "waiting" | "in_service" | "completed
 export type ServiceType = "tire" | "corrective" | "preventive";
 export type AttendanceHistoryChangeType = "created" | "status_changed" | "deleted";
 export type AttendanceHistoryActorRole = "system" | "operator" | "admin";
+export type CriticalQueueSeverity = "attention" | "critical";
 
 export interface Attendance {
   id: string;
@@ -33,6 +34,33 @@ export interface AttendanceHistoryEntry {
   changedByEmail?: string;
   note?: string;
   createdAt: number;
+}
+
+export interface CriticalAttendanceSignal {
+  attendanceId: string;
+  licensePlate: string;
+  vehicleModel: string;
+  status: Extract<AttendanceStatus, "arrival" | "waiting" | "in_service">;
+  stageDurationMinutes: number;
+  thresholdMinutes: number;
+  severity: CriticalQueueSeverity;
+}
+
+export interface AttendanceOperationalMetrics {
+  averageTotalMinutesCompleted: number;
+  averageArrivalMinutes: number;
+  averageWaitingMinutes: number;
+  averageInServiceMinutes: number;
+  bottleneckStage: Extract<AttendanceStatus, "arrival" | "waiting" | "in_service"> | null;
+  bottleneckAverageMinutes: number;
+  criticalQueueCount: number;
+  criticalByStatus: {
+    arrival: number;
+    waiting: number;
+    in_service: number;
+  };
+  criticalAttendances: CriticalAttendanceSignal[];
+  completedMeasuredCount: number;
 }
 
 export interface AttendanceFormData {
@@ -73,6 +101,11 @@ export const ATTENDANCE_HISTORY_ACTOR_LABELS: Record<AttendanceHistoryActorRole,
   system: "Sistema",
   operator: "Operador",
   admin: "Administrador",
+};
+
+export const CRITICAL_QUEUE_SEVERITY_LABELS: Record<CriticalQueueSeverity, string> = {
+  attention: "Atenção",
+  critical: "Crítico",
 };
 
 export const STATUS_PROGRESSION: AttendanceStatus[] = ["arrival", "waiting", "in_service", "completed"];
