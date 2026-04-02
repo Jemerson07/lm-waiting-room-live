@@ -6,6 +6,7 @@ import { AccessRequiredCard } from "@/components/access-required-card";
 import { AdminAttendanceCard } from "@/components/admin-attendance-card";
 import { AdminCreateAttendanceModal } from "@/components/admin-create-attendance-modal";
 import { AdminOverview } from "@/components/admin-overview";
+import { AttendanceHistoryModal } from "@/components/attendance-history-modal";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -30,6 +31,7 @@ export default function AdminScreen() {
   });
 
   const [showNewModal, setShowNewModal] = useState(false);
+  const [selectedHistoryAttendance, setSelectedHistoryAttendance] = useState<Attendance | null>(null);
   const [licensePlate, setLicensePlate] = useState("");
   const [vehicleModel, setVehicleModel] = useState("");
   const [serviceType, setServiceType] = useState<"tire" | "corrective" | "preventive">("preventive");
@@ -140,6 +142,9 @@ export default function AdminScreen() {
   const handleDelete = async (id: string) => {
     try {
       await deleteAttendance(Number(id));
+      if (selectedHistoryAttendance?.id === id) {
+        setSelectedHistoryAttendance(null);
+      }
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
       Alert.alert("Erro", "Não foi possível remover o atendimento");
@@ -252,6 +257,7 @@ export default function AdminScreen() {
               tintColor={tintColor}
               canDelete={isAdmin}
               onAdvance={() => handleUpdateStatus(attendance)}
+              onViewHistory={() => setSelectedHistoryAttendance(attendance)}
               onDelete={
                 isAdmin
                   ? () => {
@@ -300,6 +306,17 @@ export default function AdminScreen() {
         setCustomerPhone={setCustomerPhone}
         description={description}
         setDescription={setDescription}
+      />
+
+      <AttendanceHistoryModal
+        visible={Boolean(selectedHistoryAttendance)}
+        attendanceId={selectedHistoryAttendance?.id}
+        licensePlate={selectedHistoryAttendance?.licensePlate}
+        onClose={() => setSelectedHistoryAttendance(null)}
+        backgroundColor={backgroundColor}
+        cardBackground={cardBackground}
+        borderColor={borderColor}
+        tintColor={tintColor}
       />
     </ThemedView>
   );

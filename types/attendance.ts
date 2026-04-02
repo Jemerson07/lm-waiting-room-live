@@ -4,19 +4,35 @@
 
 export type AttendanceStatus = "arrival" | "waiting" | "in_service" | "completed";
 export type ServiceType = "tire" | "corrective" | "preventive";
+export type AttendanceHistoryChangeType = "created" | "status_changed" | "deleted";
+export type AttendanceHistoryActorRole = "system" | "operator" | "admin";
 
 export interface Attendance {
   id: string;
-  licensePlate: string; // Formato: ABC-1234 ou ABC1D34 (Mercosul)
-  vehicleModel: string; // Ex: VW Nivus Highline
-  customerName?: string; // Nome do cliente ou empresa
-  customerPhone?: string; // Telefone do cliente para WhatsApp
+  licensePlate: string;
+  vehicleModel: string;
+  customerName?: string;
+  customerPhone?: string;
   status: AttendanceStatus;
-  serviceType: ServiceType; // Tipo de serviço
+  serviceType: ServiceType;
   description?: string;
-  whatsappNotificationSent?: AttendanceStatus; // Último status notificado via WhatsApp
-  createdAt: number; // Timestamp em milissegundos
-  updatedAt: number; // Timestamp em milissegundos
+  whatsappNotificationSent?: AttendanceStatus;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AttendanceHistoryEntry {
+  id: string;
+  attendanceId: string;
+  fromStatus?: AttendanceStatus | null;
+  toStatus: AttendanceStatus;
+  changeType: AttendanceHistoryChangeType;
+  changedByUserId?: string;
+  changedByRole: AttendanceHistoryActorRole;
+  changedByName?: string;
+  changedByEmail?: string;
+  note?: string;
+  createdAt: number;
 }
 
 export interface AttendanceFormData {
@@ -28,7 +44,6 @@ export interface AttendanceFormData {
   description?: string;
 }
 
-// Mapeamento de status para labels em português
 export const STATUS_LABELS: Record<AttendanceStatus, string> = {
   arrival: "Chegada",
   waiting: "Aguardando",
@@ -36,29 +51,32 @@ export const STATUS_LABELS: Record<AttendanceStatus, string> = {
   completed: "Finalizada",
 };
 
-// Mapeamento de tipos de serviço para labels em português
 export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
   tire: "Pneu",
   corrective: "Corretiva",
   preventive: "Preventiva",
 };
 
-// Mapeamento de tipos de serviço para ícones
 export const SERVICE_TYPE_ICONS: Record<ServiceType, string> = {
   tire: "🔧",
   corrective: "⚠️",
   preventive: "✓",
 };
 
-// Ordem de progressão dos status
-export const STATUS_PROGRESSION: AttendanceStatus[] = [
-  "arrival",
-  "waiting",
-  "in_service",
-  "completed",
-];
+export const ATTENDANCE_HISTORY_CHANGE_LABELS: Record<AttendanceHistoryChangeType, string> = {
+  created: "Criação",
+  status_changed: "Mudança de status",
+  deleted: "Remoção",
+};
 
-// Função auxiliar para obter próximo status
+export const ATTENDANCE_HISTORY_ACTOR_LABELS: Record<AttendanceHistoryActorRole, string> = {
+  system: "Sistema",
+  operator: "Operador",
+  admin: "Administrador",
+};
+
+export const STATUS_PROGRESSION: AttendanceStatus[] = ["arrival", "waiting", "in_service", "completed"];
+
 export function getNextStatus(currentStatus: AttendanceStatus): AttendanceStatus | null {
   const currentIndex = STATUS_PROGRESSION.indexOf(currentStatus);
   if (currentIndex === -1 || currentIndex === STATUS_PROGRESSION.length - 1) {
@@ -67,24 +85,19 @@ export function getNextStatus(currentStatus: AttendanceStatus): AttendanceStatus
   return STATUS_PROGRESSION[currentIndex + 1];
 }
 
-// Função auxiliar para validar formato de placa
 export function validateLicensePlate(plate: string): boolean {
-  // Formato brasileiro: ABC-1234 ou ABC1D34 (Mercosul)
   const oldFormat = /^[A-Z]{3}-?\d{4}$/i;
   const mercosulFormat = /^[A-Z]{3}\d[A-Z]\d{2}$/i;
   return oldFormat.test(plate) || mercosulFormat.test(plate);
 }
 
-// Função auxiliar para formatar placa
 export function formatLicensePlate(plate: string): string {
   const cleaned = plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
 
-  // Formato antigo: ABC-1234
   if (/^[A-Z]{3}\d{4}$/i.test(cleaned)) {
     return `${cleaned.slice(0, 3)}-${cleaned.slice(3)}`;
   }
 
-  // Formato Mercosul: ABC1D34
   if (/^[A-Z]{3}\d[A-Z]\d{2}$/i.test(cleaned)) {
     return cleaned;
   }
@@ -92,7 +105,6 @@ export function formatLicensePlate(plate: string): string {
   return cleaned;
 }
 
-// Função auxiliar para calcular tempo decorrido
 export function getElapsedTime(timestamp: number): string {
   const now = Date.now();
   const elapsed = now - timestamp;

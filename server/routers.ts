@@ -6,6 +6,13 @@ import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, operatorProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 
+function toHistoryActor(user: { id: number; role: string }) {
+  return {
+    userId: user.id,
+    role: user.role === "admin" ? "admin" : "operator",
+  } as const;
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -43,6 +50,15 @@ export const appRouter = router({
     manageList: operatorProcedure.query(async () => {
       return db.getAllAttendances();
     }),
+    history: operatorProcedure
+      .input(
+        z.object({
+          attendanceId: z.number(),
+        }),
+      )
+      .query(async ({ input }) => {
+        return db.getAttendanceHistory(input.attendanceId);
+      }),
     create: operatorProcedure
       .input(
         z.object({
@@ -54,8 +70,8 @@ export const appRouter = router({
           description: z.string().optional(),
         }),
       )
-      .mutation(async ({ input }) => {
-        return db.createAttendance(input);
+      .mutation(async ({ ctx, input }) => {
+        return db.createAttendance(input, toHistoryActor(ctx.user));
       }),
     updateStatus: operatorProcedure
       .input(
@@ -65,14 +81,14 @@ export const appRouter = router({
           sendWhatsApp: z.boolean().optional().default(true),
         }),
       )
-      .mutation(async ({ input }) => {
-        await db.updateAttendanceStatusWithWhatsApp(input.id, input.status, input.sendWhatsApp);
+      .mutation(async ({ ctx, input }) => {
+        await db.updateAttendanceStatusWithWhatsApp(input.id, input.status, input.sendWhatsApp, toHistoryActor(ctx.user));
         return { success: true };
       }),
     delete: adminProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
-        await db.deleteAttendance(input.id);
+      .mutation(async ({ ctx, input }) => {
+        await db.deleteAttendance(input.id, toHistoryActor(ctx.user));
         return { success: true };
       }),
   }),

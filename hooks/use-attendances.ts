@@ -28,24 +28,27 @@ export function useAttendances(options: UseAttendancesOptions = {}) {
   const attendances = query.data ?? [];
   const loading = enabled ? query.isLoading : false;
 
+  const invalidateAttendanceQueries = useCallback(() => {
+    utils.attendances.manageList.invalidate();
+    utils.attendances.liveList.invalidate();
+    utils.attendances.history.invalidate();
+  }, [utils]);
+
   const createMutation = trpc.attendances.create.useMutation({
     onSuccess: () => {
-      utils.attendances.manageList.invalidate();
-      utils.attendances.liveList.invalidate();
+      invalidateAttendanceQueries();
     },
   });
 
   const updateStatusMutation = trpc.attendances.updateStatus.useMutation({
     onSuccess: () => {
-      utils.attendances.manageList.invalidate();
-      utils.attendances.liveList.invalidate();
+      invalidateAttendanceQueries();
     },
   });
 
   const deleteMutation = trpc.attendances.delete.useMutation({
     onSuccess: () => {
-      utils.attendances.manageList.invalidate();
-      utils.attendances.liveList.invalidate();
+      invalidateAttendanceQueries();
     },
   });
 

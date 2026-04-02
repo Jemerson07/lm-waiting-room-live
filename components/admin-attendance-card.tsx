@@ -17,6 +17,7 @@ interface AdminAttendanceCardProps {
   borderColor: string;
   tintColor: string;
   onAdvance: () => void;
+  onViewHistory: () => void;
   onDelete?: () => void;
   canDelete?: boolean;
 }
@@ -93,6 +94,7 @@ export function AdminAttendanceCard({
   borderColor,
   tintColor,
   onAdvance,
+  onViewHistory,
   onDelete,
   canDelete = false,
 }: AdminAttendanceCardProps) {
@@ -196,6 +198,10 @@ export function AdminAttendanceCard({
             </ThemedText>
           </Pressable>
 
+          <Pressable style={[styles.secondaryButton, { borderColor }]} onPress={onViewHistory}>
+            <ThemedText style={styles.secondaryButtonText}>Histórico</ThemedText>
+          </Pressable>
+
           {canDelete && onDelete ? (
             <Pressable
               style={({ pressed }) => [
@@ -297,6 +303,17 @@ const styles = StyleSheet.create({
   },
   actionButtonDisabled: { opacity: 0.9 },
   primaryActionText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700", textAlign: "center" },
+  secondaryButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.02)",
+  },
+  secondaryButtonText: { fontSize: 13, fontWeight: "700" },
   deleteButton: {
     paddingHorizontal: 14,
     paddingVertical: 12,
