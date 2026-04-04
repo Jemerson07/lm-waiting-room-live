@@ -14,11 +14,45 @@ import { trpc } from "@/lib/trpc";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useAttendances } from "@/hooks/use-attendances";
-import type { Attendance, AttendanceStatus, DelayReason } from "@/types/attendance";
-import { STATUS_LABELS, SERVICE_TYPE_LABELS, getAttendancePrioritySnapshot, getNextStatus, validateLicensePlate, formatLicensePlate } from "@/types/attendance";
+import type { Attendance, AttendanceStatus, DelayReason, OperationalPriorityLevel } from "@/types/attendance";
+import {
+  PRIORITY_LEVEL_LABELS,
+  STATUS_LABELS,
+  SERVICE_TYPE_LABELS,
+  getAttendancePrioritySnapshot,
+  getNextStatus,
+  validateLicensePlate,
+  formatLicensePlate,
+} from "@/types/attendance";
 
-const STATUS_SORT_ORDER: Record<AttendanceStatus, number> = { arrival: 0, waiting: 1, in_service: 2, completed: 3 };
 type StatusFeedback = { title: string; detail: string };
+
+const PRIORITY_ORDER: OperationalPriorityLevel[] = ["critical", "attention", "normal"];
+const PRIORITY_SECTION_META: Record<OperationalPriorityLevel, { title: string; subtitle: string; color: string }> = {
+  critical: {
+    title: "Prioridade máxima",
+    subtitle: "Casos que devem ser tratados primeiro para reduzir risco operacional e SLA estourado.",
+    color: "#B3261E",
+  },
+  attention: {
+    title: "Atenção operacional",
+    subtitle: "Atendimentos que merecem ação coordenada antes que virem caso crítico.",
+    color: "#B54708",
+  },
+  normal: {
+    title: "Fluxo normal",
+    subtitle: "Atendimentos estabilizados, ainda acompanhados pela fila inteligente.",
+    color: "#1C7C54",
+  },
+};
+
+function sortAttendancesByPriority(items: Attendance[]) {
+  return [...items].sort((a, b) => {
+    const priorityDelta = getAttendancePrioritySnapshot(b).score - getAttendancePrioritySnapshot(a).score;
+    if (priorityDelta !== 0) return priorityDelta;
+    return Number(b.updatedAt) - Number(a.updatedAt);
+  });
+}
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();
@@ -52,21 +86,38 @@ export default function AdminScreen() {
 
   const filteredAttendances = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return attendances
-      .filter((a) => selectedFilter === "all" || a.status === selectedFilter)
-      .filter((a) => {
-        if (!q) return true;
-        const haystack = [a.licensePlate, a.vehicleModel, a.customerName || "", a.description || "", a.operationalNote || "", STATUS_LABELS[a.status] || a.status, SERVICE_TYPE_LABELS[a.serviceType] || a.serviceType].join(" ").toLowerCase();
-        return haystack.includes(q);
-      })
-      .sort((a, b) => {
-        const priorityDelta = getAttendancePrioritySnapshot(b).score - getAttendancePrioritySnapshot(a).score;
-        if (priorityDelta !== 0) return priorityDelta;
-        const statusDelta = STATUS_SORT_ORDER[a.status] - STATUS_SORT_ORDER[b.status];
-        if (statusDelta !== 0) return statusDelta;
-        return Number(b.updatedAt) - Number(a.updatedAt);
-      });
+    return sortAttendancesByPriority(
+      attendances
+        .filter((a) => selectedFilter === "all" || a.status === selectedFilter)
+        .filter((a) => {
+          if (!q) return true;
+          const haystack = [
+            a.licensePlate,
+            a.vehicleModel,
+            a.customerName || "",
+            a.description || "",
+            a.operationalNote || "",
+            STATUS_LABELS[a.status] || a.status,
+            SERVICE_TYPE_LABELS[a.serviceType] || a.serviceType,
+          ]
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(q);
+        }),
+    );
   }, [attendances, searchQuery, selectedFilter]);
+
+  const activeAttendances = useMemo(() => filteredAttendances.filter((attendance) => attendance.status !== "completed"), [filteredAttendances]);
+  const recommendedAttendance = activeAttendances[0] ?? null;
+  const recommendedPriority = recommendedAttendance ? getAttendancePrioritySnapshot(recommendedAttendance) : null;
+  const groupedPriorityQueues = useMemo(() => {
+    const groups: Record<OperationalPriorityLevel, Attendance[]> = { critical: [], attention: [], normal: [] };
+    activeAttendances.forEach((attendance) => {
+      groups[getAttendancePrioritySnapshot(attendance).level].push(attendance);
+    });
+    return groups;
+  }, [activeAttendances]);
+  const completedAttendances = useMemo(() => filteredAttendances.filter((attendance) => attendance.status === "completed"), [filteredAttendances]);
 
   const resetForm = () => {
     setShowNewModal(false);
@@ -86,7 +137,14 @@ export default function AdminScreen() {
 
     try {
       setSubmitting(true);
-      await createAttendance({ licensePlate: formatLicensePlate(licensePlate), vehicleModel, serviceType, customerName: customerName.trim() || undefined, customerPhone: customerPhone.trim() || undefined, description: description.trim() || undefined });
+      await createAttendance({
+        licensePlate: formatLicensePlate(licensePlate),
+        vehicleModel,
+        serviceType,
+        customerName: customerName.trim() || undefined,
+        customerPhone: customerPhone.trim() || undefined,
+        description: description.trim() || undefined,
+      });
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setStatusFeedback({ title: "Atendimento criado", detail: `${formatLicensePlate(licensePlate)} entrou no fluxo operacional.` });
       Alert.alert("Sucesso!", `Atendimento criado para ${formatLicensePlate(licensePlate)}`, [{ text: "OK" }]);
@@ -168,7 +226,7 @@ export default function AdminScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 80 }]}>
         <View style={styles.header}>
           <View style={styles.headerRow}>
-            <View style={styles.headerTextBlock}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Gerencie os atendimentos em tempo real</ThemedText></View>
+            <View style={styles.headerTextBlock}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Gerencie os atendimentos com fila inteligente em tempo real</ThemedText></View>
             <View style={[styles.roleBadge, { backgroundColor: isAdmin ? "rgba(0, 200, 83, 0.12)" : "rgba(0, 82, 163, 0.10)" }]}><ThemedText style={[styles.roleBadgeText, { color: isAdmin ? "#1C7C54" : "#0052A3" }]}>{roleLabel}</ThemedText></View>
           </View>
         </View>
@@ -177,25 +235,92 @@ export default function AdminScreen() {
 
         <AdminOverview attendances={attendances} operationalMetrics={operationalMetrics} selectedFilter={selectedFilter} onFilterChange={setSelectedFilter} searchQuery={searchQuery} onSearchChange={setSearchQuery} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} />
 
-        <View style={styles.listHeader}><ThemedText style={styles.listTitle}>Fila operacional priorizada</ThemedText><ThemedText style={styles.listSubtitle}>{filteredAttendances.length} atendimento(s) encontrado(s){searchQuery.trim() ? " com a busca aplicada" : ""} • ordenação por SLA, atraso e estágio do fluxo</ThemedText></View>
+        {recommendedAttendance && recommendedPriority ? (
+          <View style={[styles.recommendedSurface, { backgroundColor: cardBackground, borderColor: recommendedPriority.level === "critical" ? "rgba(179,38,30,0.25)" : recommendedPriority.level === "attention" ? "rgba(181,71,8,0.25)" : borderColor }]}>
+            <View style={styles.recommendedHeader}><View style={[styles.recommendedDot, { backgroundColor: recommendedPriority.level === "critical" ? "#B3261E" : recommendedPriority.level === "attention" ? "#B54708" : "#1C7C54" }]} /><ThemedText style={styles.recommendedTitle}>Atender agora</ThemedText></View>
+            <ThemedText style={styles.recommendedPlate}>{recommendedAttendance.licensePlate} · {recommendedAttendance.vehicleModel}</ThemedText>
+            <ThemedText style={styles.recommendedReason}>{recommendedPriority.reason}</ThemedText>
+            <ThemedText style={styles.recommendedAction}>Ação sugerida: {recommendedPriority.actionLabel}</ThemedText>
+          </View>
+        ) : null}
 
-        {loading ? <View style={styles.loadingContainer}><ActivityIndicator size="large" color={tintColor} /></View> : filteredAttendances.length === 0 ? <View style={styles.emptyState}><ThemedText style={styles.emptyText}>Nenhum atendimento encontrado com os filtros atuais.</ThemedText></View> : filteredAttendances.map((attendance) => (
-          <AdminAttendanceCard
-            key={attendance.id}
-            attendance={attendance}
-            cardBackground={cardBackground}
-            borderColor={borderColor}
-            tintColor={tintColor}
-            canDelete={isAdmin}
-            onAdvance={() => handleUpdateStatus(attendance)}
-            onViewHistory={() => setSelectedHistoryAttendance(attendance)}
-            onManageGovernance={() => setSelectedGovernanceAttendance(attendance)}
-            onDelete={isAdmin ? () => {
-              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              Alert.alert("Remover Atendimento", `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`, [{ text: "Manter", style: "cancel" }, { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) }]);
-            } : undefined}
-          />
-        ))}
+        <View style={styles.listHeader}><ThemedText style={styles.listTitle}>Fila inteligente</ThemedText><ThemedText style={styles.listSubtitle}>{filteredAttendances.length} atendimento(s) encontrado(s){searchQuery.trim() ? " com a busca aplicada" : ""} • agrupados por prioridade operacional</ThemedText></View>
+
+        {loading ? (
+          <View style={styles.loadingContainer}><ActivityIndicator size="large" color={tintColor} /></View>
+        ) : filteredAttendances.length === 0 ? (
+          <View style={styles.emptyState}><ThemedText style={styles.emptyText}>Nenhum atendimento encontrado com os filtros atuais.</ThemedText></View>
+        ) : (
+          <>
+            {PRIORITY_ORDER.map((priorityLevel) => {
+              const items = groupedPriorityQueues[priorityLevel];
+              if (!items.length) return null;
+              const sectionMeta = PRIORITY_SECTION_META[priorityLevel];
+              return (
+                <View key={priorityLevel} style={styles.prioritySection}>
+                  <View style={styles.prioritySectionHeader}>
+                    <View style={[styles.prioritySectionDot, { backgroundColor: sectionMeta.color }]} />
+                    <View style={styles.prioritySectionTextBlock}>
+                      <ThemedText style={styles.prioritySectionTitle}>{sectionMeta.title}</ThemedText>
+                      <ThemedText style={styles.prioritySectionSubtitle}>{sectionMeta.subtitle}</ThemedText>
+                    </View>
+                    <View style={styles.prioritySectionBadge}><ThemedText style={styles.prioritySectionBadgeText}>{items.length}</ThemedText></View>
+                  </View>
+                  {items.map((attendance, index) => (
+                    <AdminAttendanceCard
+                      key={attendance.id}
+                      attendance={attendance}
+                      cardBackground={cardBackground}
+                      borderColor={borderColor}
+                      tintColor={tintColor}
+                      canDelete={isAdmin}
+                      highlightRecommended={recommendedAttendance?.id === attendance.id}
+                      queuePosition={index + 1}
+                      onAdvance={() => handleUpdateStatus(attendance)}
+                      onViewHistory={() => setSelectedHistoryAttendance(attendance)}
+                      onManageGovernance={() => setSelectedGovernanceAttendance(attendance)}
+                      onDelete={isAdmin ? () => {
+                        if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        Alert.alert("Remover Atendimento", `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`, [{ text: "Manter", style: "cancel" }, { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) }]);
+                      } : undefined}
+                    />
+                  ))}
+                </View>
+              );
+            })}
+
+            {completedAttendances.length > 0 ? (
+              <View style={styles.prioritySection}>
+                <View style={styles.prioritySectionHeader}>
+                  <View style={[styles.prioritySectionDot, { backgroundColor: "#1C7C54" }]} />
+                  <View style={styles.prioritySectionTextBlock}>
+                    <ThemedText style={styles.prioritySectionTitle}>Histórico concluído</ThemedText>
+                    <ThemedText style={styles.prioritySectionSubtitle}>Atendimentos finalizados e mantidos para consulta e auditoria.</ThemedText>
+                  </View>
+                  <View style={styles.prioritySectionBadge}><ThemedText style={styles.prioritySectionBadgeText}>{completedAttendances.length}</ThemedText></View>
+                </View>
+                {completedAttendances.map((attendance, index) => (
+                  <AdminAttendanceCard
+                    key={attendance.id}
+                    attendance={attendance}
+                    cardBackground={cardBackground}
+                    borderColor={borderColor}
+                    tintColor={tintColor}
+                    canDelete={isAdmin}
+                    queuePosition={index + 1}
+                    onAdvance={() => handleUpdateStatus(attendance)}
+                    onViewHistory={() => setSelectedHistoryAttendance(attendance)}
+                    onManageGovernance={() => setSelectedGovernanceAttendance(attendance)}
+                    onDelete={isAdmin ? () => {
+                      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      Alert.alert("Remover Atendimento", `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`, [{ text: "Manter", style: "cancel" }, { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) }]);
+                    } : undefined}
+                  />
+                ))}
+              </View>
+            ) : null}
+          </>
+        )}
       </ScrollView>
 
       <Pressable style={[styles.fab, { backgroundColor: tintColor, bottom: Math.max(insets.bottom, 20) + 60 }]} onPress={() => setShowNewModal(true)}><ThemedText style={styles.fabText}>+</ThemedText></Pressable>
@@ -224,9 +349,24 @@ const styles = StyleSheet.create({
   feedbackTextBlock: { flex: 1 },
   feedbackTitle: { fontSize: 14, fontWeight: "800", marginBottom: 4 },
   feedbackDetail: { fontSize: 13, opacity: 0.72 },
+  recommendedSurface: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 18 },
+  recommendedHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
+  recommendedDot: { width: 12, height: 12, borderRadius: 6 },
+  recommendedTitle: { fontSize: 16, fontWeight: "900" },
+  recommendedPlate: { fontSize: 22, fontWeight: "900", marginBottom: 6 },
+  recommendedReason: { fontSize: 13, lineHeight: 20, opacity: 0.8, marginBottom: 6 },
+  recommendedAction: { fontSize: 13, fontWeight: "800" },
   listHeader: { marginBottom: 14 },
   listTitle: { fontSize: 18, fontWeight: "700" },
   listSubtitle: { fontSize: 13, opacity: 0.65, marginTop: 4 },
+  prioritySection: { marginBottom: 18 },
+  prioritySectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  prioritySectionDot: { width: 12, height: 12, borderRadius: 6 },
+  prioritySectionTextBlock: { flex: 1 },
+  prioritySectionTitle: { fontSize: 16, fontWeight: "800" },
+  prioritySectionSubtitle: { fontSize: 12, opacity: 0.72, marginTop: 3, lineHeight: 18 },
+  prioritySectionBadge: { minWidth: 34, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(0,0,0,0.06)", alignItems: "center" },
+  prioritySectionBadgeText: { fontSize: 12, fontWeight: "800" },
   loadingContainer: { paddingVertical: 40, alignItems: "center" },
   emptyState: { paddingVertical: 60, alignItems: "center" },
   emptyText: { fontSize: 16, opacity: 0.55, textAlign: "center" },

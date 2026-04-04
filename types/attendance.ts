@@ -132,6 +132,7 @@ export interface AttendancePrioritySnapshot {
   level: OperationalPriorityLevel;
   label: string;
   reason: string;
+  actionLabel: string;
 }
 
 export interface AttendanceFormData {
@@ -198,6 +199,12 @@ export const SLA_SEVERITY_LABELS: Record<SlaSeverity, string> = {
   exempt: "Exceção SLA",
 };
 
+export const PRIORITY_LEVEL_LABELS: Record<OperationalPriorityLevel, string> = {
+  normal: "Fluxo normal",
+  attention: "Atenção operacional",
+  critical: "Prioridade máxima",
+};
+
 export const SERVICE_TYPE_SLA_TARGETS: Record<ServiceType, number> = {
   tire: 120,
   preventive: 180,
@@ -217,10 +224,27 @@ export const DELAY_REASON_OPTIONS: DelayReason[] = [
 ];
 
 const STATUS_PRIORITY_WEIGHTS: Record<AttendanceStatus, number> = {
-  arrival: 16,
-  waiting: 28,
-  in_service: 42,
+  arrival: 18,
+  waiting: 34,
+  in_service: 48,
   completed: 0,
+};
+
+const SERVICE_PRIORITY_WEIGHTS: Record<ServiceType, number> = {
+  tire: 8,
+  preventive: 12,
+  corrective: 20,
+};
+
+const DELAY_REASON_PRIORITY_WEIGHTS: Record<DelayReason, number> = {
+  none: 0,
+  customer_unavailable: 8,
+  parts_wait: 12,
+  approval_pending: 10,
+  high_demand: 16,
+  diagnosis_extended: 18,
+  system_issue: 20,
+  other: 10,
 };
 
 export function getNextStatus(currentStatus: AttendanceStatus): AttendanceStatus | null {
@@ -304,40 +328,56 @@ export function getAttendancePrioritySnapshot(
       level: "normal",
       label: "Histórico",
       reason: "Atendimento já concluído e mantido apenas para acompanhamento histórico.",
+      actionLabel: "Acompanhar histórico",
     };
   }
 
-  let score = STATUS_PRIORITY_WEIGHTS[attendance.status] + Math.min(Math.round(elapsedMinutes / 10), 30);
-  let label = "Fluxo estável";
+  let score = STATUS_PRIORITY_WEIGHTS[attendance.status];
+  score += SERVICE_PRIORITY_WEIGHTS[attendance.serviceType];
+  score += DELAY_REASON_PRIORITY_WEIGHTS[attendance.delayReason];
+  score += Math.min(Math.round(elapsedMinutes / 8), 40);
+
+  let label = PRIORITY_LEVEL_LABELS.normal;
   let reason = attendance.status === "in_service"
     ? "Veículo em manutenção neste momento."
     : attendance.status === "waiting"
       ? "Veículo aguardando avanço do fluxo."
       : "Veículo recém-chegado no processo.";
+  let actionLabel = attendance.status === "arrival"
+    ? "Direcionar para triagem"
+    : attendance.status === "waiting"
+      ? "Puxar para atendimento"
+      : "Acompanhar até concluir";
 
   if (sla.severity === "breached") {
-    score += 140;
-    label = "Prioridade máxima";
-    reason = "Atendimento acima do SLA total. Requer ação imediata.";
+    score += 150;
+    label = PRIORITY_LEVEL_LABELS.critical;
+    reason = "Atendimento acima do SLA total. Requer ação imediata da equipe.";
+    actionLabel = attendance.status === "waiting" ? "Atender imediatamente" : "Concluir com prioridade";
   } else if (sla.severity === "risk") {
-    score += 90;
-    label = "Atenção operacional";
+    score += 96;
+    label = PRIORITY_LEVEL_LABELS.attention;
     reason = "Atendimento próximo do limite do SLA.";
+    actionLabel = attendance.status === "arrival" ? "Acelerar triagem" : attendance.status === "waiting" ? "Preparar chamada" : "Evitar atraso final";
   } else if (sla.severity === "exempt") {
-    score = Math.max(8, score - 48);
-    label = "Exceção SLA";
+    score = Math.max(10, score - 42);
+    label = "Exceção de SLA";
     reason = "Atendimento fora da meta padrão por decisão operacional.";
+    actionLabel = attendance.status === "waiting" ? "Seguir exceção aprovada" : "Monitorar exceção";
   }
 
   if (attendance.delayReason !== "none") {
-    score += 18;
     const delayText = DELAY_REASON_LABELS[attendance.delayReason];
-    reason = sla.severity === "on_track" ? `Motivo registrado: ${delayText}.` : `${reason} Motivo registrado: ${delayText}.`;
-    if (label === "Fluxo estável") {
+    reason = `${reason} Motivo registrado: ${delayText}.`;
+    if (label === PRIORITY_LEVEL_LABELS.normal) {
       label = "Acompanhar atraso";
+      actionLabel = attendance.status === "waiting" ? "Revisar bloqueio" : "Monitorar motivo";
     }
   }
 
-  const level: OperationalPriorityLevel = score >= 160 ? "critical" : score >= 95 ? "attention" : "normal";
-  return { score, level, label, reason };
+  const level: OperationalPriorityLevel = score >= 170 ? "critical" : score >= 100 ? "attention" : "normal";
+  if (level === "critical" && label !== "Exceção de SLA") label = PRIORITY_LEVEL_LABELS.critical;
+  if (level === "attention" && label === PRIORITY_LEVEL_LABELS.normal) label = PRIORITY_LEVEL_LABELS.attention;
+
+  return { score, level, label, reason, actionLabel };
 }

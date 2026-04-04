@@ -1,7 +1,13 @@
 import { StyleSheet, View, ScrollView, Pressable, TextInput, Dimensions } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import type { Attendance, AttendanceOperationalMetrics, AttendanceStatus } from "@/types/attendance";
-import { CRITICAL_QUEUE_SEVERITY_LABELS, DELAY_REASON_LABELS, SERVICE_TYPE_LABELS, STATUS_LABELS } from "@/types/attendance";
+import {
+  CRITICAL_QUEUE_SEVERITY_LABELS,
+  DELAY_REASON_LABELS,
+  SERVICE_TYPE_LABELS,
+  STATUS_LABELS,
+  getAttendancePrioritySnapshot,
+} from "@/types/attendance";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const STATUS_FILTERS: Array<AttendanceStatus | "all"> = ["all", "arrival", "waiting", "in_service", "completed"];
@@ -22,16 +28,22 @@ export function AdminOverview({ attendances, operationalMetrics, selectedFilter,
   const total = attendances.length;
   const completed = attendances.filter((a) => a.status === "completed").length;
   const inService = attendances.filter((a) => a.status === "in_service").length;
+  const activeItems = attendances.filter((a) => a.status !== "completed");
   const active = total - completed;
   const criticalQueueCount = operationalMetrics?.criticalQueueCount ?? 0;
+  const criticalPriorityCount = activeItems.filter((a) => getAttendancePrioritySnapshot(a).level === "critical").length;
+  const attentionPriorityCount = activeItems.filter((a) => getAttendancePrioritySnapshot(a).level === "attention").length;
+  const normalPriorityCount = activeItems.filter((a) => getAttendancePrioritySnapshot(a).level === "normal").length;
+  const recommendedAttendance = [...activeItems].sort((a, b) => getAttendancePrioritySnapshot(b).score - getAttendancePrioritySnapshot(a).score)[0];
+  const recommendedPriority = recommendedAttendance ? getAttendancePrioritySnapshot(recommendedAttendance) : null;
 
   const summaryCards = [
     { title: "Total", value: total, subtitle: "Atendimentos registrados", color: tintColor },
     { title: "Ativos", value: active, subtitle: "Em andamento no sistema", color: "#5C6BC0" },
+    { title: "Críticos", value: criticalPriorityCount, subtitle: "Ação imediata", color: criticalPriorityCount > 0 ? "#B3261E" : "#00C853" },
+    { title: "Atenção", value: attentionPriorityCount, subtitle: "Perto do limite", color: attentionPriorityCount > 0 ? "#B54708" : "#00C853" },
     { title: "Em atendimento", value: inService, subtitle: "Demandas em execução", color: "#FF6B00" },
-    { title: "Fila crítica", value: criticalQueueCount, subtitle: "Veículos acima do tempo ideal", color: criticalQueueCount > 0 ? "#B54708" : "#00C853" },
-    { title: "SLA em risco", value: operationalMetrics?.activeSlaRiskCount ?? 0, subtitle: "Atendimentos perto da meta", color: (operationalMetrics?.activeSlaRiskCount ?? 0) > 0 ? "#A35B00" : "#00C853" },
-    { title: "SLA estourado", value: operationalMetrics?.activeSlaBreachedCount ?? 0, subtitle: "Ativos fora da meta", color: (operationalMetrics?.activeSlaBreachedCount ?? 0) > 0 ? "#B3261E" : "#00C853" },
+    { title: "Fluxo normal", value: normalPriorityCount, subtitle: "Sem urgência alta", color: "#1C7C54" },
   ];
 
   return (
@@ -45,6 +57,22 @@ export function AdminOverview({ attendances, operationalMetrics, selectedFilter,
           </View>
         ))}
       </View>
+
+      {recommendedAttendance && recommendedPriority ? (
+        <View style={[styles.recommendedSurface, { backgroundColor: cardBackground, borderColor: recommendedPriority.level === "critical" ? "rgba(179,38,30,0.25)" : recommendedPriority.level === "attention" ? "rgba(181,71,8,0.25)" : borderColor }]}> 
+          <View style={styles.recommendedHeaderRow}>
+            <View>
+              <ThemedText style={styles.recommendedLabel}>Próximo atendimento recomendado</ThemedText>
+              <ThemedText style={styles.recommendedPlate}>{recommendedAttendance.licensePlate} · {recommendedAttendance.vehicleModel}</ThemedText>
+            </View>
+            <View style={[styles.recommendedBadge, { backgroundColor: recommendedPriority.level === "critical" ? "rgba(179,38,30,0.12)" : recommendedPriority.level === "attention" ? "rgba(181,71,8,0.12)" : "rgba(0,200,83,0.12)" }]}>
+              <ThemedText style={[styles.recommendedBadgeText, { color: recommendedPriority.level === "critical" ? "#B3261E" : recommendedPriority.level === "attention" ? "#B54708" : "#1C7C54" }]}>{recommendedPriority.label}</ThemedText>
+            </View>
+          </View>
+          <ThemedText style={styles.recommendedText}>{recommendedPriority.reason}</ThemedText>
+          <ThemedText style={styles.recommendedAction}>Ação sugerida: {recommendedPriority.actionLabel}</ThemedText>
+        </View>
+      ) : null}
 
       {operationalMetrics ? (
         <View style={[styles.insightsSurface, { backgroundColor: cardBackground, borderColor }]}> 
@@ -123,6 +151,14 @@ const styles = StyleSheet.create({
   summaryCardTitle: { fontSize: 12, opacity: 0.65, marginBottom: 8, fontWeight: "600" },
   summaryCardValue: { fontSize: 28, fontWeight: "800", marginBottom: 6 },
   summaryCardSubtitle: { fontSize: 12, opacity: 0.68, lineHeight: 18 },
+  recommendedSurface: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 18 },
+  recommendedHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 },
+  recommendedLabel: { fontSize: 12, opacity: 0.65, marginBottom: 6, fontWeight: "700" },
+  recommendedPlate: { fontSize: 20, fontWeight: "900" },
+  recommendedBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  recommendedBadgeText: { fontSize: 11, fontWeight: "900" },
+  recommendedText: { fontSize: 13, lineHeight: 20, opacity: 0.8, marginBottom: 6 },
+  recommendedAction: { fontSize: 13, fontWeight: "800" },
   insightsSurface: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 18 },
   insightsHeaderRow: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 16 },
   insightCard: { flex: 1, minWidth: SCREEN_WIDTH > 768 ? 250 : 220, backgroundColor: "rgba(0,0,0,0.025)", borderRadius: 14, padding: 14 },

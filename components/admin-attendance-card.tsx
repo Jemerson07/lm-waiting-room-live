@@ -5,10 +5,12 @@ import { Colors } from "@/constants/theme";
 import type { Attendance, AttendanceStatus } from "@/types/attendance";
 import {
   DELAY_REASON_LABELS,
+  PRIORITY_LEVEL_LABELS,
   SERVICE_TYPE_ICONS,
   SERVICE_TYPE_LABELS,
   SLA_SEVERITY_LABELS,
   STATUS_LABELS,
+  getAttendancePrioritySnapshot,
   getAttendanceSlaSnapshot,
   getElapsedTime,
   getNextStatus,
@@ -24,55 +26,48 @@ interface AdminAttendanceCardProps {
   onManageGovernance: () => void;
   onDelete?: () => void;
   canDelete?: boolean;
+  highlightRecommended?: boolean;
+  queuePosition?: number;
 }
-
-type PriorityMeta = { label: string; helper: string; backgroundColor: string; textColor: string };
 
 function getStatusColor(status: AttendanceStatus): string {
   const colorScheme = "light";
   return Colors[colorScheme][`status${status.charAt(0).toUpperCase() + status.slice(1).replace(/_./g, (m) => m[1].toUpperCase())}` as keyof typeof Colors.light] as string;
 }
 
-function getElapsedMinutes(createdAt: string | number | Date): number {
-  const createdTimestamp = createdAt instanceof Date ? createdAt.getTime() : Number(new Date(createdAt));
-  return Math.max(0, Math.round((Date.now() - createdTimestamp) / 60000));
-}
-
-function getPriorityMeta(attendance: Attendance): PriorityMeta {
-  const elapsedMinutes = getElapsedMinutes(attendance.createdAt);
-  if (attendance.slaExceptionActive) {
-    return { label: "Exceção de SLA", helper: attendance.slaExceptionReason || "Este atendimento foi marcado como exceção operacional.", backgroundColor: "rgba(123, 31, 162, 0.12)", textColor: "#7B1FA2" };
-  }
-  if (attendance.status === "completed") {
-    return { label: "Histórico", helper: "Atendimento finalizado e preservado para análise.", backgroundColor: "rgba(0, 200, 83, 0.10)", textColor: "#1C7C54" };
-  }
-  if (attendance.status === "in_service") {
-    return { label: "Alta atenção", helper: "Veículo em execução agora. Priorize o acompanhamento até a conclusão.", backgroundColor: "rgba(255, 107, 0, 0.12)", textColor: "#B54708" };
-  }
-  if (attendance.status === "waiting" && elapsedMinutes >= 30) {
-    return { label: "Fila longa", helper: "Tempo de espera acima de 30 minutos. Vale revisar a fila.", backgroundColor: "rgba(255, 165, 0, 0.12)", textColor: "#A35B00" };
-  }
-  if (attendance.status === "arrival" && elapsedMinutes <= 15) {
-    return { label: "Entrada recente", helper: "Novo veículo no fluxo. Boa hora para triagem rápida.", backgroundColor: "rgba(0, 145, 234, 0.12)", textColor: "#005B9F" };
-  }
-  return { label: "Acompanhar", helper: "Fluxo normal do atendimento. Siga a evolução conforme o status.", backgroundColor: "rgba(92, 107, 192, 0.12)", textColor: "#3749A6" };
-}
-
-export function AdminAttendanceCard({ attendance, cardBackground, borderColor, tintColor, onAdvance, onViewHistory, onManageGovernance, onDelete, canDelete = false }: AdminAttendanceCardProps) {
+export function AdminAttendanceCard({
+  attendance,
+  cardBackground,
+  borderColor,
+  tintColor,
+  onAdvance,
+  onViewHistory,
+  onManageGovernance,
+  onDelete,
+  canDelete = false,
+  highlightRecommended = false,
+  queuePosition,
+}: AdminAttendanceCardProps) {
   const nextStatus = getNextStatus(attendance.status);
   const isCompleted = !nextStatus;
   const statusColor = getStatusColor(attendance.status);
-  const priority = getPriorityMeta(attendance);
+  const priority = getAttendancePrioritySnapshot(attendance);
   const sla = getAttendanceSlaSnapshot(attendance);
   const updatedLabel = new Date(Number(attendance.updatedAt)).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const priorityColor = priority.level === "critical" ? "#B3261E" : priority.level === "attention" ? "#B54708" : "#1C7C54";
+  const priorityBackground = priority.level === "critical" ? "rgba(179,38,30,0.12)" : priority.level === "attention" ? "rgba(181,71,8,0.12)" : "rgba(0,200,83,0.10)";
 
   return (
-    <View style={[styles.card, { backgroundColor: cardBackground, borderColor }]}>
-      <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
+    <View style={[styles.card, { backgroundColor: cardBackground, borderColor: highlightRecommended ? tintColor : borderColor }]}>
+      <View style={[styles.statusIndicator, { backgroundColor: highlightRecommended ? tintColor : statusColor }]} />
       <View style={styles.cardContent}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
-            <ThemedText type="subtitle" style={styles.licensePlate}>{attendance.licensePlate}</ThemedText>
+            <View style={styles.titleRow}>
+              <ThemedText type="subtitle" style={styles.licensePlate}>{attendance.licensePlate}</ThemedText>
+              {typeof queuePosition === "number" ? <View style={styles.positionBadge}><ThemedText style={styles.positionBadgeText}>#{queuePosition}</ThemedText></View> : null}
+              {highlightRecommended ? <View style={[styles.recommendedBadge, { backgroundColor: tintColor }]}><ThemedText style={styles.recommendedBadgeText}>Recomendado agora</ThemedText></View> : null}
+            </View>
             <ThemedText style={styles.vehicleModel}>{attendance.vehicleModel}</ThemedText>
           </View>
           <View style={styles.cardHeaderRight}>
@@ -83,9 +78,13 @@ export function AdminAttendanceCard({ attendance, cardBackground, borderColor, t
 
         <View style={styles.progressWrapper}><StatusProgressTrack status={attendance.status} accentColor={statusColor} compact /></View>
 
-        <View style={[styles.priorityPanel, { backgroundColor: priority.backgroundColor }]}>
-          <ThemedText style={[styles.priorityTitle, { color: priority.textColor }]}>{priority.label}</ThemedText>
-          <ThemedText style={styles.priorityHelper}>{priority.helper}</ThemedText>
+        <View style={[styles.priorityPanel, { backgroundColor: priorityBackground }]}>
+          <View style={styles.priorityRow}>
+            <ThemedText style={[styles.priorityTitle, { color: priorityColor }]}>{priority.label}</ThemedText>
+            <View style={[styles.priorityChip, { backgroundColor: priorityBackground }]}><ThemedText style={[styles.priorityChipText, { color: priorityColor }]}>{PRIORITY_LEVEL_LABELS[priority.level]}</ThemedText></View>
+          </View>
+          <ThemedText style={styles.priorityHelper}>{priority.reason}</ThemedText>
+          <ThemedText style={[styles.priorityAction, { color: priorityColor }]}>Próxima ação sugerida: {priority.actionLabel}</ThemedText>
         </View>
 
         <View style={styles.metaRow}>
@@ -128,16 +127,25 @@ const styles = StyleSheet.create({
   cardContent: { flex: 1, padding: 16 },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", gap: 12, marginBottom: 10 },
   cardHeaderLeft: { flex: 1 },
+  titleRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 2 },
   cardHeaderRight: { alignItems: "flex-end", gap: 8 },
   licensePlate: { fontSize: 22, fontWeight: "800" },
   vehicleModel: { fontSize: 15, opacity: 0.84 },
   elapsedTime: { fontSize: 12, opacity: 0.65, fontWeight: "600" },
+  positionBadge: { backgroundColor: "rgba(0,0,0,0.06)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
+  positionBadgeText: { fontSize: 11, fontWeight: "800" },
+  recommendedBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
+  recommendedBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
   statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
   statusBadgeText: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
   progressWrapper: { marginBottom: 12 },
   priorityPanel: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12 },
-  priorityTitle: { fontSize: 13, fontWeight: "800", marginBottom: 4 },
-  priorityHelper: { fontSize: 12, lineHeight: 18, opacity: 0.82 },
+  priorityRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" },
+  priorityTitle: { fontSize: 13, fontWeight: "800" },
+  priorityChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
+  priorityChipText: { fontSize: 10, fontWeight: "900" },
+  priorityHelper: { fontSize: 12, lineHeight: 18, opacity: 0.82, marginBottom: 6 },
+  priorityAction: { fontSize: 12, fontWeight: "800" },
   metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 },
   serviceTypeBadge: { alignSelf: "flex-start", backgroundColor: "rgba(0, 102, 204, 0.1)", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
   serviceTypeText: { fontSize: 12, fontWeight: "700", color: "#0066CC" },
