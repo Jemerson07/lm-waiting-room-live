@@ -19,6 +19,17 @@ const dateRangeInput = z.object({
   endAt: z.date().optional(),
 }).optional();
 
+const delayReasonEnum = z.enum([
+  "none",
+  "customer_unavailable",
+  "parts_wait",
+  "approval_pending",
+  "high_demand",
+  "diagnosis_extended",
+  "system_issue",
+  "other",
+]);
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -57,61 +68,35 @@ export const appRouter = router({
       return db.getAllAttendances();
     }),
     history: operatorProcedure
-      .input(
-        z.object({
-          attendanceId: z.number(),
-        }),
-      )
-      .query(async ({ input }) => {
-        return db.getAttendanceHistory(input.attendanceId);
-      }),
+      .input(z.object({ attendanceId: z.number() }))
+      .query(async ({ input }) => db.getAttendanceHistory(input.attendanceId)),
     metrics: operatorProcedure
       .input(dateRangeInput)
-      .query(async ({ input }) => {
-        return getOperationalMetrics({ startAt: input?.startAt, endAt: input?.endAt });
-      }),
+      .query(async ({ input }) => getOperationalMetrics({ startAt: input?.startAt, endAt: input?.endAt })),
     notificationHealth: adminProcedure
       .input(dateRangeInput)
-      .query(async ({ input }) => {
-        return db.getNotificationHealthSummary({ startAt: input?.startAt, endAt: input?.endAt });
-      }),
+      .query(async ({ input }) => db.getNotificationHealthSummary({ startAt: input?.startAt, endAt: input?.endAt })),
     notificationLogs: adminProcedure
-      .input(
-        z.object({
-          startAt: z.date().optional(),
-          endAt: z.date().optional(),
-          onlyFailures: z.boolean().optional(),
-        }).optional(),
-      )
-      .query(async ({ input }) => {
-        return db.getNotificationLogs({
-          startAt: input?.startAt,
-          endAt: input?.endAt,
-          onlyFailures: input?.onlyFailures,
-        });
-      }),
+      .input(z.object({ startAt: z.date().optional(), endAt: z.date().optional(), onlyFailures: z.boolean().optional() }).optional())
+      .query(async ({ input }) => db.getNotificationLogs({ startAt: input?.startAt, endAt: input?.endAt, onlyFailures: input?.onlyFailures })),
     create: operatorProcedure
-      .input(
-        z.object({
-          licensePlate: z.string(),
-          vehicleModel: z.string(),
-          serviceType: z.enum(["tire", "corrective", "preventive"]),
-          customerName: z.string().optional(),
-          customerPhone: z.string().optional(),
-          description: z.string().optional(),
-        }),
-      )
+      .input(z.object({ licensePlate: z.string(), vehicleModel: z.string(), serviceType: z.enum(["tire", "corrective", "preventive"]), customerName: z.string().optional(), customerPhone: z.string().optional(), description: z.string().optional() }))
+      .mutation(async ({ ctx, input }) => db.createAttendance(input, toHistoryActor(ctx.user))),
+    updateGovernance: operatorProcedure
+      .input(z.object({ id: z.number(), delayReason: delayReasonEnum, operationalNote: z.string().optional(), slaExceptionActive: z.boolean(), slaExceptionReason: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
-        return db.createAttendance(input, toHistoryActor(ctx.user));
+        if (input.slaExceptionActive && !input.slaExceptionReason?.trim()) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o motivo da exceção de SLA." });
+        }
+        return db.updateAttendanceGovernance(input.id, {
+          delayReason: input.delayReason,
+          operationalNote: input.operationalNote,
+          slaExceptionActive: input.slaExceptionActive,
+          slaExceptionReason: input.slaExceptionReason,
+        }, toHistoryActor(ctx.user));
       }),
     updateStatus: operatorProcedure
-      .input(
-        z.object({
-          id: z.number(),
-          status: z.enum(["arrival", "waiting", "in_service", "completed"]),
-          sendWhatsApp: z.boolean().optional().default(true),
-        }),
-      )
+      .input(z.object({ id: z.number(), status: z.enum(["arrival", "waiting", "in_service", "completed"]), sendWhatsApp: z.boolean().optional().default(true) }))
       .mutation(async ({ ctx, input }) => {
         await db.updateAttendanceStatusWithWhatsApp(input.id, input.status, input.sendWhatsApp, toHistoryActor(ctx.user));
         return { success: true };

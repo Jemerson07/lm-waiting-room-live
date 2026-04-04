@@ -4,10 +4,20 @@
 
 export type AttendanceStatus = "arrival" | "waiting" | "in_service" | "completed";
 export type ServiceType = "tire" | "corrective" | "preventive";
-export type AttendanceHistoryChangeType = "created" | "status_changed" | "deleted";
+export type AttendanceHistoryChangeType = "created" | "status_changed" | "deleted" | "governance_updated";
 export type AttendanceHistoryActorRole = "system" | "operator" | "admin";
 export type CriticalQueueSeverity = "attention" | "critical";
 export type NotificationChannel = "whatsapp";
+export type DelayReason =
+  | "none"
+  | "customer_unavailable"
+  | "parts_wait"
+  | "approval_pending"
+  | "high_demand"
+  | "diagnosis_extended"
+  | "system_issue"
+  | "other";
+export type SlaSeverity = "on_track" | "risk" | "breached" | "exempt";
 
 export interface Attendance {
   id: string;
@@ -19,6 +29,10 @@ export interface Attendance {
   serviceType: ServiceType;
   description?: string;
   whatsappNotificationSent?: AttendanceStatus;
+  delayReason: DelayReason;
+  operationalNote?: string;
+  slaExceptionActive: boolean;
+  slaExceptionReason?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -71,6 +85,18 @@ export interface CriticalAttendanceSignal {
   severity: CriticalQueueSeverity;
 }
 
+export interface SlaAlertSignal {
+  attendanceId: string;
+  licensePlate: string;
+  vehicleModel: string;
+  serviceType: ServiceType;
+  status: AttendanceStatus;
+  totalElapsedMinutes: number;
+  slaTargetMinutes: number;
+  severity: Extract<SlaSeverity, "risk" | "breached">;
+  delayReason: DelayReason;
+}
+
 export interface AttendanceOperationalMetrics {
   averageTotalMinutesCompleted: number;
   averageArrivalMinutes: number;
@@ -86,6 +112,18 @@ export interface AttendanceOperationalMetrics {
   };
   criticalAttendances: CriticalAttendanceSignal[];
   completedMeasuredCount: number;
+  slaWithinCount: number;
+  slaBreachedCount: number;
+  slaExceptionCount: number;
+  activeSlaRiskCount: number;
+  activeSlaBreachedCount: number;
+  topSlaAlerts: SlaAlertSignal[];
+}
+
+export interface AttendanceSlaSnapshot {
+  targetMinutes: number;
+  elapsedMinutes: number;
+  severity: SlaSeverity;
 }
 
 export interface AttendanceFormData {
@@ -120,6 +158,7 @@ export const ATTENDANCE_HISTORY_CHANGE_LABELS: Record<AttendanceHistoryChangeTyp
   created: "Criação",
   status_changed: "Mudança de status",
   deleted: "Remoção",
+  governance_updated: "Governança",
 };
 
 export const ATTENDANCE_HISTORY_ACTOR_LABELS: Record<AttendanceHistoryActorRole, string> = {
@@ -133,7 +172,41 @@ export const CRITICAL_QUEUE_SEVERITY_LABELS: Record<CriticalQueueSeverity, strin
   critical: "Crítico",
 };
 
+export const DELAY_REASON_LABELS: Record<DelayReason, string> = {
+  none: "Sem atraso registrado",
+  customer_unavailable: "Cliente indisponível",
+  parts_wait: "Aguardando peça",
+  approval_pending: "Aguardando aprovação",
+  high_demand: "Alta demanda operacional",
+  diagnosis_extended: "Diagnóstico estendido",
+  system_issue: "Falha sistêmica",
+  other: "Outro motivo",
+};
+
+export const SLA_SEVERITY_LABELS: Record<SlaSeverity, string> = {
+  on_track: "Dentro do SLA",
+  risk: "Em risco",
+  breached: "SLA estourado",
+  exempt: "Exceção SLA",
+};
+
+export const SERVICE_TYPE_SLA_TARGETS: Record<ServiceType, number> = {
+  tire: 120,
+  preventive: 180,
+  corrective: 240,
+};
+
 export const STATUS_PROGRESSION: AttendanceStatus[] = ["arrival", "waiting", "in_service", "completed"];
+export const DELAY_REASON_OPTIONS: DelayReason[] = [
+  "none",
+  "customer_unavailable",
+  "parts_wait",
+  "approval_pending",
+  "high_demand",
+  "diagnosis_extended",
+  "system_issue",
+  "other",
+];
 
 export function getNextStatus(currentStatus: AttendanceStatus): AttendanceStatus | null {
   const currentIndex = STATUS_PROGRESSION.indexOf(currentStatus);
@@ -181,4 +254,25 @@ export function getElapsedTime(timestamp: number): string {
     return `Há ${minutes} min`;
   }
   return "Agora";
+}
+
+export function getAttendanceElapsedMinutes(attendance: Pick<Attendance, "createdAt" | "updatedAt" | "status">) {
+  const endTime = attendance.status === "completed" ? attendance.updatedAt : Date.now();
+  return Math.max(0, Math.round((endTime - attendance.createdAt) / 60000));
+}
+
+export function getAttendanceSlaSnapshot(attendance: Pick<Attendance, "serviceType" | "createdAt" | "updatedAt" | "status" | "slaExceptionActive">): AttendanceSlaSnapshot {
+  const targetMinutes = SERVICE_TYPE_SLA_TARGETS[attendance.serviceType];
+  const elapsedMinutes = getAttendanceElapsedMinutes(attendance);
+
+  if (attendance.slaExceptionActive) {
+    return { targetMinutes, elapsedMinutes, severity: "exempt" };
+  }
+  if (elapsedMinutes >= targetMinutes) {
+    return { targetMinutes, elapsedMinutes, severity: "breached" };
+  }
+  if (elapsedMinutes >= Math.round(targetMinutes * 0.8)) {
+    return { targetMinutes, elapsedMinutes, severity: "risk" };
+  }
+  return { targetMinutes, elapsedMinutes, severity: "on_track" };
 }

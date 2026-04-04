@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { trpc } from "@/lib/trpc";
-import type { AttendanceStatus } from "@/types/attendance";
+import type { AttendanceStatus, DelayReason } from "@/types/attendance";
 
 type AttendanceScope = "manage" | "live";
 
@@ -37,51 +37,26 @@ export function useAttendances(options: UseAttendancesOptions = {}) {
     utils.attendances.notificationLogs.invalidate();
   }, [utils]);
 
-  const createMutation = trpc.attendances.create.useMutation({
-    onSuccess: () => {
-      invalidateAttendanceQueries();
-    },
-  });
+  const createMutation = trpc.attendances.create.useMutation({ onSuccess: invalidateAttendanceQueries });
+  const updateStatusMutation = trpc.attendances.updateStatus.useMutation({ onSuccess: invalidateAttendanceQueries });
+  const deleteMutation = trpc.attendances.delete.useMutation({ onSuccess: invalidateAttendanceQueries });
+  const updateGovernanceMutation = trpc.attendances.updateGovernance.useMutation({ onSuccess: invalidateAttendanceQueries });
 
-  const updateStatusMutation = trpc.attendances.updateStatus.useMutation({
-    onSuccess: () => {
-      invalidateAttendanceQueries();
-    },
-  });
+  const createAttendance = useCallback(async (data: { licensePlate: string; vehicleModel: string; serviceType: "tire" | "corrective" | "preventive"; customerName?: string; customerPhone?: string; description?: string; }) => {
+    await createMutation.mutateAsync(data);
+  }, [createMutation]);
 
-  const deleteMutation = trpc.attendances.delete.useMutation({
-    onSuccess: () => {
-      invalidateAttendanceQueries();
-    },
-  });
+  const updateAttendanceStatus = useCallback(async (id: number, status: AttendanceStatus) => {
+    await updateStatusMutation.mutateAsync({ id, status });
+  }, [updateStatusMutation]);
 
-  const createAttendance = useCallback(
-    async (data: {
-      licensePlate: string;
-      vehicleModel: string;
-      serviceType: "tire" | "corrective" | "preventive";
-      customerName?: string;
-      customerPhone?: string;
-      description?: string;
-    }) => {
-      await createMutation.mutateAsync(data);
-    },
-    [createMutation],
-  );
+  const updateAttendanceGovernance = useCallback(async (data: { id: number; delayReason: DelayReason; operationalNote?: string; slaExceptionActive: boolean; slaExceptionReason?: string; }) => {
+    await updateGovernanceMutation.mutateAsync(data);
+  }, [updateGovernanceMutation]);
 
-  const updateAttendanceStatus = useCallback(
-    async (id: number, status: AttendanceStatus) => {
-      await updateStatusMutation.mutateAsync({ id, status });
-    },
-    [updateStatusMutation],
-  );
-
-  const deleteAttendance = useCallback(
-    async (id: number) => {
-      await deleteMutation.mutateAsync({ id });
-    },
-    [deleteMutation],
-  );
+  const deleteAttendance = useCallback(async (id: number) => {
+    await deleteMutation.mutateAsync({ id });
+  }, [deleteMutation]);
 
   const reload = useCallback(() => {
     if (scope === "live") {
@@ -102,6 +77,10 @@ export function useAttendances(options: UseAttendancesOptions = {}) {
     status: att.status as AttendanceStatus,
     serviceType: att.serviceType as "tire" | "corrective" | "preventive",
     description: "description" in att ? att.description ?? undefined : undefined,
+    delayReason: "delayReason" in att ? (att.delayReason as DelayReason) : "none",
+    operationalNote: "operationalNote" in att ? att.operationalNote ?? undefined : undefined,
+    slaExceptionActive: "slaExceptionActive" in att ? Boolean(att.slaExceptionActive) : false,
+    slaExceptionReason: "slaExceptionReason" in att ? att.slaExceptionReason ?? undefined : undefined,
     createdAt: new Date(att.createdAt).getTime(),
     updatedAt: new Date(att.updatedAt).getTime(),
   }));
@@ -111,6 +90,7 @@ export function useAttendances(options: UseAttendancesOptions = {}) {
     loading,
     createAttendance,
     updateAttendanceStatus,
+    updateAttendanceGovernance,
     deleteAttendance,
     reload,
   };

@@ -3,8 +3,18 @@ import { boolean, int, index, mysqlEnum, mysqlTable, text, timestamp, varchar } 
 const attendanceStatusValues = ["arrival", "waiting", "in_service", "completed"] as const;
 const serviceTypeValues = ["tire", "corrective", "preventive"] as const;
 const whatsappNotificationValues = ["none", "arrival", "waiting", "in_service", "completed"] as const;
-const attendanceHistoryChangeTypeValues = ["created", "status_changed", "deleted"] as const;
+const attendanceHistoryChangeTypeValues = ["created", "status_changed", "deleted", "governance_updated"] as const;
 const notificationChannelValues = ["whatsapp"] as const;
+const delayReasonValues = [
+  "none",
+  "customer_unavailable",
+  "parts_wait",
+  "approval_pending",
+  "high_demand",
+  "diagnosis_extended",
+  "system_issue",
+  "other",
+] as const;
 
 /**
  * Core user table backing auth flow.
@@ -43,6 +53,10 @@ export const attendances = mysqlTable(
     whatsappNotificationSent: mysqlEnum("whatsappNotificationSent", whatsappNotificationValues)
       .default("none")
       .notNull(),
+    delayReason: mysqlEnum("delayReason", delayReasonValues).default("none").notNull(),
+    operationalNote: text("operationalNote"),
+    slaExceptionActive: boolean("slaExceptionActive").default(false).notNull(),
+    slaExceptionReason: text("slaExceptionReason"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
@@ -50,6 +64,8 @@ export const attendances = mysqlTable(
     statusIdx: index("attendances_status_idx").on(table.status),
     createdAtIdx: index("attendances_created_at_idx").on(table.createdAt),
     updatedAtIdx: index("attendances_updated_at_idx").on(table.updatedAt),
+    delayReasonIdx: index("attendances_delay_reason_idx").on(table.delayReason),
+    slaExceptionIdx: index("attendances_sla_exception_idx").on(table.slaExceptionActive),
   }),
 );
 

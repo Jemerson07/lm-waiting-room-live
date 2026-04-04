@@ -10,8 +10,17 @@ import {
 import { ENV } from "./_core/env";
 
 type DbAttendanceStatus = "arrival" | "waiting" | "in_service" | "completed";
-type AttendanceHistoryChangeType = "created" | "status_changed" | "deleted";
+type AttendanceHistoryChangeType = "created" | "status_changed" | "deleted" | "governance_updated";
 type AttendanceHistoryActorRole = "system" | "operator" | "admin";
+type DelayReason =
+  | "none"
+  | "customer_unavailable"
+  | "parts_wait"
+  | "approval_pending"
+  | "high_demand"
+  | "diagnosis_extended"
+  | "system_issue"
+  | "other";
 
 type HistoryActor = {
   userId?: number;
@@ -340,6 +349,8 @@ export async function createAttendance(
       description: data.description,
       status: "arrival",
       whatsappNotificationSent: "none",
+      delayReason: "none",
+      slaExceptionActive: false,
     })
     .$returningId();
 
@@ -356,6 +367,72 @@ export async function createAttendance(
   }
 
   return inserted;
+}
+
+export async function updateAttendanceGovernance(
+  id: number,
+  input: {
+    delayReason: DelayReason;
+    operationalNote?: string;
+    slaExceptionActive: boolean;
+    slaExceptionReason?: string;
+  },
+  actor?: HistoryActor,
+) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const result = await db.select().from(attendances).where(eq(attendances.id, id)).limit(1);
+  const attendance = result[0];
+
+  if (!attendance) {
+    throw new Error("Attendance not found");
+  }
+
+  const normalizedOperationalNote = input.operationalNote?.trim() || null;
+  const normalizedSlaExceptionReason = input.slaExceptionActive ? input.slaExceptionReason?.trim() || null : null;
+  const changes: string[] = [];
+
+  if (attendance.delayReason !== input.delayReason) {
+    changes.push(`Motivo de atraso: ${attendance.delayReason} → ${input.delayReason}`);
+  }
+  if ((attendance.operationalNote || null) !== normalizedOperationalNote) {
+    changes.push(normalizedOperationalNote ? "Nota operacional atualizada" : "Nota operacional removida");
+  }
+  if (Boolean(attendance.slaExceptionActive) !== Boolean(input.slaExceptionActive)) {
+    changes.push(input.slaExceptionActive ? "Exceção de SLA ativada" : "Exceção de SLA removida");
+  }
+  if ((attendance.slaExceptionReason || null) !== normalizedSlaExceptionReason) {
+    changes.push(normalizedSlaExceptionReason ? "Motivo da exceção SLA atualizado" : "Motivo da exceção SLA removido");
+  }
+
+  if (!changes.length) {
+    return attendance;
+  }
+
+  await db
+    .update(attendances)
+    .set({
+      delayReason: input.delayReason,
+      operationalNote: normalizedOperationalNote,
+      slaExceptionActive: input.slaExceptionActive,
+      slaExceptionReason: normalizedSlaExceptionReason,
+    })
+    .where(eq(attendances.id, id));
+
+  await recordAttendanceHistory({
+    attendanceId: attendance.id,
+    fromStatus: attendance.status,
+    toStatus: attendance.status,
+    changeType: "governance_updated",
+    actor,
+    note: changes.join(" • "),
+  });
+
+  const updated = await db.select().from(attendances).where(eq(attendances.id, id)).limit(1);
+  return updated[0];
 }
 
 export async function deleteAttendance(id: number, actor?: HistoryActor) {
