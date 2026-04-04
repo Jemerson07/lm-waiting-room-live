@@ -50,9 +50,7 @@ async function recordAttendanceHistory(input: {
   note?: string;
 }) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   await db.insert(attendanceStatusHistory).values({
     attendanceId: input.attendanceId,
@@ -75,9 +73,7 @@ async function recordNotificationLog(input: {
   actor?: HistoryActor;
 }) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   await db.insert(notificationLogs).values({
     attendanceId: input.attendanceId,
@@ -93,9 +89,7 @@ async function recordNotificationLog(input: {
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
+  if (!user.openId) throw new Error("User openId is required for upsert");
 
   const db = await getDb();
   if (!db) {
@@ -106,7 +100,6 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   try {
     const values: InsertUser = { openId: user.openId };
     const updateSet: Record<string, unknown> = {};
-
     const textFields = ["name", "email", "loginMethod"] as const;
     type TextField = (typeof textFields)[number];
 
@@ -132,13 +125,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.role = "admin";
     }
 
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
+    if (!values.lastSignedIn) values.lastSignedIn = new Date();
+    if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
 
     await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
   } catch (error) {
@@ -153,7 +141,6 @@ export async function getUserByOpenId(openId: string) {
     console.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
-
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
@@ -164,7 +151,6 @@ export async function getUserById(userId: number) {
     console.warn("[Database] Cannot get user by id: database not available");
     return undefined;
   }
-
   const result = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
@@ -194,18 +180,11 @@ export async function getAllUsers() {
 
 export async function updateUserRole(userId: number, role: "user" | "admin") {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   const currentUser = await getUserById(userId);
-  if (!currentUser) {
-    throw new Error("User not found");
-  }
-
-  if (currentUser.openId === ENV.ownerOpenId && role !== "admin") {
-    throw new Error("Owner role cannot be changed");
-  }
+  if (!currentUser) throw new Error("User not found");
+  if (currentUser.openId === ENV.ownerOpenId && role !== "admin") throw new Error("Owner role cannot be changed");
 
   await db.update(users).set({ role }).where(eq(users.id, userId));
   return getUserById(userId);
@@ -217,7 +196,6 @@ export async function getAllAttendances() {
     console.warn("[Database] Cannot get attendances: database not available");
     return [];
   }
-
   return db.select().from(attendances);
 }
 
@@ -291,14 +269,7 @@ export async function getNotificationHealthSummary(filters?: { startAt?: Date; e
   const failedAttempts = totalAttempts - successfulAttempts;
   const successRate = totalAttempts > 0 ? Math.round((successfulAttempts / totalAttempts) * 100) : 0;
   const latestFailures = rows.filter((row) => !row.success).slice(0, 6);
-
-  return {
-    totalAttempts,
-    successfulAttempts,
-    failedAttempts,
-    successRate,
-    latestFailures,
-  };
+  return { totalAttempts, successfulAttempts, failedAttempts, successRate, latestFailures };
 }
 
 export async function getPublicLiveAttendances() {
@@ -316,6 +287,8 @@ export async function getPublicLiveAttendances() {
       customerName: attendances.customerName,
       status: attendances.status,
       serviceType: attendances.serviceType,
+      delayReason: attendances.delayReason,
+      slaExceptionActive: attendances.slaExceptionActive,
       createdAt: attendances.createdAt,
       updatedAt: attendances.updatedAt,
     })
@@ -334,9 +307,7 @@ export async function createAttendance(
   actor?: HistoryActor,
 ) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   const inserted = await db
     .insert(attendances)
@@ -371,56 +342,27 @@ export async function createAttendance(
 
 export async function updateAttendanceGovernance(
   id: number,
-  input: {
-    delayReason: DelayReason;
-    operationalNote?: string;
-    slaExceptionActive: boolean;
-    slaExceptionReason?: string;
-  },
+  input: { delayReason: DelayReason; operationalNote?: string; slaExceptionActive: boolean; slaExceptionReason?: string },
   actor?: HistoryActor,
 ) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   const result = await db.select().from(attendances).where(eq(attendances.id, id)).limit(1);
   const attendance = result[0];
-
-  if (!attendance) {
-    throw new Error("Attendance not found");
-  }
+  if (!attendance) throw new Error("Attendance not found");
 
   const normalizedOperationalNote = input.operationalNote?.trim() || null;
   const normalizedSlaExceptionReason = input.slaExceptionActive ? input.slaExceptionReason?.trim() || null : null;
   const changes: string[] = [];
 
-  if (attendance.delayReason !== input.delayReason) {
-    changes.push(`Motivo de atraso: ${attendance.delayReason} → ${input.delayReason}`);
-  }
-  if ((attendance.operationalNote || null) !== normalizedOperationalNote) {
-    changes.push(normalizedOperationalNote ? "Nota operacional atualizada" : "Nota operacional removida");
-  }
-  if (Boolean(attendance.slaExceptionActive) !== Boolean(input.slaExceptionActive)) {
-    changes.push(input.slaExceptionActive ? "Exceção de SLA ativada" : "Exceção de SLA removida");
-  }
-  if ((attendance.slaExceptionReason || null) !== normalizedSlaExceptionReason) {
-    changes.push(normalizedSlaExceptionReason ? "Motivo da exceção SLA atualizado" : "Motivo da exceção SLA removido");
-  }
+  if (attendance.delayReason !== input.delayReason) changes.push(`Motivo de atraso: ${attendance.delayReason} → ${input.delayReason}`);
+  if ((attendance.operationalNote || null) !== normalizedOperationalNote) changes.push(normalizedOperationalNote ? "Nota operacional atualizada" : "Nota operacional removida");
+  if (Boolean(attendance.slaExceptionActive) !== Boolean(input.slaExceptionActive)) changes.push(input.slaExceptionActive ? "Exceção de SLA ativada" : "Exceção de SLA removida");
+  if ((attendance.slaExceptionReason || null) !== normalizedSlaExceptionReason) changes.push(normalizedSlaExceptionReason ? "Motivo da exceção SLA atualizado" : "Motivo da exceção SLA removido");
+  if (!changes.length) return attendance;
 
-  if (!changes.length) {
-    return attendance;
-  }
-
-  await db
-    .update(attendances)
-    .set({
-      delayReason: input.delayReason,
-      operationalNote: normalizedOperationalNote,
-      slaExceptionActive: input.slaExceptionActive,
-      slaExceptionReason: normalizedSlaExceptionReason,
-    })
-    .where(eq(attendances.id, id));
+  await db.update(attendances).set({ delayReason: input.delayReason, operationalNote: normalizedOperationalNote, slaExceptionActive: input.slaExceptionActive, slaExceptionReason: normalizedSlaExceptionReason }).where(eq(attendances.id, id));
 
   await recordAttendanceHistory({
     attendanceId: attendance.id,
@@ -437,16 +379,11 @@ export async function updateAttendanceGovernance(
 
 export async function deleteAttendance(id: number, actor?: HistoryActor) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   const result = await db.select().from(attendances).where(eq(attendances.id, id)).limit(1);
   const attendance = result[0];
-
-  if (!attendance) {
-    throw new Error("Attendance not found");
-  }
+  if (!attendance) throw new Error("Attendance not found");
 
   await recordAttendanceHistory({
     attendanceId: attendance.id,
@@ -460,56 +397,26 @@ export async function deleteAttendance(id: number, actor?: HistoryActor) {
   await db.delete(attendances).where(eq(attendances.id, id));
 }
 
-export async function updateAttendanceStatusWithWhatsApp(
-  id: number,
-  status: DbAttendanceStatus,
-  sendWhatsApp: boolean = true,
-  actor?: HistoryActor,
-) {
+export async function updateAttendanceStatusWithWhatsApp(id: number, status: DbAttendanceStatus, sendWhatsApp: boolean = true, actor?: HistoryActor) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   const result = await db.select().from(attendances).where(eq(attendances.id, id)).limit(1);
   const attendance = result[0];
-
-  if (!attendance) {
-    throw new Error("Attendance not found");
-  }
+  if (!attendance) throw new Error("Attendance not found");
 
   const previousStatus = attendance.status;
   await db.update(attendances).set({ status }).where(eq(attendances.id, id));
 
   if (previousStatus !== status) {
-    await recordAttendanceHistory({
-      attendanceId: attendance.id,
-      fromStatus: previousStatus,
-      toStatus: status,
-      changeType: "status_changed",
-      actor,
-      note: `Status alterado de ${previousStatus} para ${status}.`,
-    });
+    await recordAttendanceHistory({ attendanceId: attendance.id, fromStatus: previousStatus, toStatus: status, changeType: "status_changed", actor, note: `Status alterado de ${previousStatus} para ${status}.` });
   }
 
   if (sendWhatsApp && attendance.customerPhone) {
     const { sendStatusNotification } = await import("./whatsapp-service");
-    const notificationResult = await sendStatusNotification(
-      attendance.customerPhone,
-      status,
-      attendance.licensePlate,
-      attendance.customerName || undefined,
-    );
+    const notificationResult = await sendStatusNotification(attendance.customerPhone, status, attendance.licensePlate, attendance.customerName || undefined);
 
-    await recordNotificationLog({
-      attendanceId: attendance.id,
-      status,
-      phoneNumber: attendance.customerPhone,
-      success: notificationResult.success,
-      providerMessageSid: notificationResult.messageSid,
-      errorMessage: notificationResult.error,
-      actor,
-    });
+    await recordNotificationLog({ attendanceId: attendance.id, status, phoneNumber: attendance.customerPhone, success: notificationResult.success, providerMessageSid: notificationResult.messageSid, errorMessage: notificationResult.error, actor });
 
     if (notificationResult.success) {
       await db.update(attendances).set({ whatsappNotificationSent: status }).where(eq(attendances.id, id));

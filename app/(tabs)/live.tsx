@@ -12,23 +12,25 @@ import { LiveHeader } from "@/components/live-header";
 import { useAttendances } from "@/hooks/use-attendances";
 import { useCompanySettings } from "@/hooks/use-company-settings";
 import type { Attendance, AttendanceStatus } from "@/types/attendance";
-import { STATUS_LABELS } from "@/types/attendance";
+import { STATUS_LABELS, getAttendancePrioritySnapshot, getAttendanceSlaSnapshot } from "@/types/attendance";
 
 const { width } = Dimensions.get("window");
 const STATUS_ORDER: AttendanceStatus[] = ["arrival", "waiting", "in_service"];
 const RECENT_COMPLETED_LIMIT = 6;
-const STATUS_MESSAGES: Record<AttendanceStatus, string> = {
-  arrival: "Seu veículo chegou e já entrou no fluxo de atendimento.",
-  waiting: "Estamos organizando a fila e em breve iniciaremos o serviço.",
-  in_service: "Outros veículos em manutenção neste momento.",
-  completed: "Atendimento concluído com sucesso. Obrigado pela confiança.",
-};
 
 function toTimestamp(value: string | number | Date): number {
   if (typeof value === "number") return value;
   if (value instanceof Date) return value.getTime();
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : new Date(value).getTime();
+}
+
+function sortAttendancesByPriority(items: Attendance[]) {
+  return [...items].sort((a, b) => {
+    const priorityDelta = getAttendancePrioritySnapshot(b).score - getAttendancePrioritySnapshot(a).score;
+    if (priorityDelta !== 0) return priorityDelta;
+    return toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt);
+  });
 }
 
 export default function LiveScreen() {
@@ -49,29 +51,54 @@ export default function LiveScreen() {
     setRefreshing(false);
   }, [reload]);
 
-  const grouped: Record<AttendanceStatus, typeof attendances> = {
-    arrival: attendances.filter((a) => a.status === "arrival"),
-    waiting: attendances.filter((a) => a.status === "waiting"),
-    in_service: attendances.filter((a) => a.status === "in_service"),
-    completed: attendances.filter((a) => a.status === "completed"),
-  };
+  const grouped: Record<AttendanceStatus, Attendance[]> = useMemo(() => ({
+    arrival: sortAttendancesByPriority(attendances.filter((a) => a.status === "arrival")),
+    waiting: sortAttendancesByPriority(attendances.filter((a) => a.status === "waiting")),
+    in_service: sortAttendancesByPriority(attendances.filter((a) => a.status === "in_service")),
+    completed: [...attendances.filter((a) => a.status === "completed")].sort((a, b) => toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt)),
+  }), [attendances]);
 
-  const sortedInService = useMemo(
-    () => [...grouped.in_service].sort((a, b) => toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt)),
-    [grouped.in_service],
-  );
+  const active = useMemo(() => sortAttendancesByPriority(STATUS_ORDER.flatMap((status) => grouped[status])), [grouped]);
+  const spotlightAttendance: Attendance | null = active[0] || null;
 
-  const spotlightAttendance: Attendance | null = sortedInService[0] || null;
-  const inServiceQueue = useMemo(
-    () => sortedInService.filter((attendance) => attendance.id !== spotlightAttendance?.id),
-    [sortedInService, spotlightAttendance],
-  );
+  const sectionItems = useMemo(() => {
+    if (!spotlightAttendance) return grouped;
+    return {
+      arrival: grouped.arrival.filter((attendance) => attendance.id !== spotlightAttendance.id),
+      waiting: grouped.waiting.filter((attendance) => attendance.id !== spotlightAttendance.id),
+      in_service: grouped.in_service.filter((attendance) => attendance.id !== spotlightAttendance.id),
+      completed: grouped.completed,
+    };
+  }, [grouped, spotlightAttendance]);
 
-  const active = useMemo(() => STATUS_ORDER.flatMap((status) => grouped[status]), [grouped]);
-  const recentCompleted = useMemo(
-    () => [...grouped.completed].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, RECENT_COMPLETED_LIMIT),
-    [grouped.completed],
-  );
+  const recentCompleted = useMemo(() => grouped.completed.slice(0, RECENT_COMPLETED_LIMIT), [grouped.completed]);
+  const criticalCount = useMemo(() => active.filter((attendance) => getAttendancePrioritySnapshot(attendance).level === "critical").length, [active]);
+  const attentionCount = useMemo(() => active.filter((attendance) => getAttendancePrioritySnapshot(attendance).level === "attention").length, [active]);
+  const breachedCount = useMemo(() => active.filter((attendance) => getAttendanceSlaSnapshot(attendance).severity === "breached").length, [active]);
+  const riskCount = useMemo(() => active.filter((attendance) => getAttendanceSlaSnapshot(attendance).severity === "risk").length, [active]);
+
+  const operationalBanner = useMemo(() => {
+    if (!active.length) return null;
+    if (breachedCount > 0) {
+      return {
+        title: "Ação imediata no fluxo",
+        message: `${breachedCount} atendimento(s) já ultrapassaram o SLA total. A fila foi reordenada para destacar os casos mais urgentes.`,
+        tone: "critical" as const,
+      };
+    }
+    if (riskCount > 0 || attentionCount > 0) {
+      return {
+        title: "Atenção operacional ativa",
+        message: `${Math.max(riskCount, attentionCount)} atendimento(s) estão perto do limite do SLA ou com atraso registrado.`,
+        tone: "attention" as const,
+      };
+    }
+    return {
+      title: "Fluxo sob controle",
+      message: "A fila está organizada por prioridade operacional e todos os atendimentos seguem dentro do ritmo esperado.",
+      tone: "normal" as const,
+    };
+  }, [active.length, attentionCount, breachedCount, riskCount]);
 
   return (
     <ThemedView style={styles.container}>
@@ -79,11 +106,21 @@ export default function LiveScreen() {
       <LiveMotionBlock delay={0} intensity="soft">
         <LiveHeader totalAttendances={attendances.length} completedAttendances={grouped.completed.length} />
       </LiveMotionBlock>
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingTop: 8, paddingBottom: Math.max(insets.bottom, 20) + 28 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" />}
       >
+        {operationalBanner ? (
+          <LiveMotionBlock delay={80} intensity="soft">
+            <View style={[styles.banner, operationalBanner.tone === "critical" ? styles.bannerCritical : operationalBanner.tone === "attention" ? styles.bannerAttention : styles.bannerNormal]}>
+              <View style={styles.bannerRow}><ThemedText style={styles.bannerTitle}>{operationalBanner.title}</ThemedText><ThemedText style={styles.bannerCount}>{criticalCount > 0 ? `${criticalCount} crítico(s)` : `${active.length} ativo(s)`}</ThemedText></View>
+              <ThemedText style={styles.bannerMessage}>{operationalBanner.message}</ThemedText>
+            </View>
+          </LiveMotionBlock>
+        ) : null}
+
         {spotlightAttendance ? (
           <LiveMotionBlock delay={120} intensity="medium">
             <LiveServiceSpotlight attendance={spotlightAttendance} />
@@ -91,8 +128,19 @@ export default function LiveScreen() {
         ) : null}
 
         {STATUS_ORDER.map((status, index) => {
-          const items = status === "in_service" ? inServiceQueue : grouped[status];
+          const items = sectionItems[status];
           if (!items.length) return null;
+          const sectionPriority = items[0] ? getAttendancePrioritySnapshot(items[0]) : null;
+          const sectionMessage = sectionPriority?.level === "critical"
+            ? "Casos desta coluna exigem resposta rápida da equipe operacional."
+            : sectionPriority?.level === "attention"
+              ? "Fila acompanhada com atenção para evitar estouro de prazo."
+              : status === "arrival"
+                ? "Veículos recém-chegados no fluxo de atendimento."
+                : status === "waiting"
+                  ? "Aguardando avanço de fila ou liberação operacional."
+                  : "Atendimentos em manutenção neste momento.";
+
           return (
             <LiveMotionBlock key={status} delay={220 + index * 110} intensity={status === "in_service" ? "medium" : "soft"}>
               <View style={styles.section}>
@@ -101,9 +149,9 @@ export default function LiveScreen() {
                     <ThemedText type="subtitle" style={styles.sectionTitle}>{STATUS_LABELS[status]}</ThemedText>
                     <View style={styles.badge}><ThemedText style={styles.badgeText}>{items.length}</ThemedText></View>
                   </View>
-                  <ThemedText style={styles.sectionMessage}>{STATUS_MESSAGES[status]}</ThemedText>
+                  <ThemedText style={styles.sectionMessage}>{sectionMessage}</ThemedText>
                 </View>
-                {items.map((attendance) => <VehicleCard key={attendance.id} attendance={attendance} showAnimation={status === "in_service"} />)}
+                {items.map((attendance) => <VehicleCard key={attendance.id} attendance={attendance} showAnimation={status === "in_service" || getAttendancePrioritySnapshot(attendance).level === "critical"} />)}
               </View>
             </LiveMotionBlock>
           );
@@ -125,7 +173,7 @@ export default function LiveScreen() {
         <LiveMotionBlock delay={520} intensity="soft">
           <View style={styles.footer}>
             <ThemedText style={styles.footerText}>Sistema de Atendimento Veicular • {settings.companyName}</ThemedText>
-            <ThemedText style={styles.footerSubtext}>Atualização automática a cada {refreshInterval} segundos</ThemedText>
+            <ThemedText style={styles.footerSubtext}>Atualização automática a cada {refreshInterval} segundos • Prioridade baseada em SLA, atraso e estágio do fluxo</ThemedText>
           </View>
         </LiveMotionBlock>
       </ScrollView>
@@ -137,6 +185,14 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: width > 768 ? 32 : 0, maxWidth: width > 1280 ? 1380 : "100%", alignSelf: "center", width: "100%" },
+  banner: { marginHorizontal: 20, marginBottom: 18, borderRadius: 22, paddingHorizontal: 18, paddingVertical: 16, borderWidth: 1 },
+  bannerNormal: { backgroundColor: "rgba(4, 28, 48, 0.62)", borderColor: "rgba(255,255,255,0.08)" },
+  bannerAttention: { backgroundColor: "rgba(70, 46, 6, 0.74)", borderColor: "rgba(255, 193, 7, 0.26)" },
+  bannerCritical: { backgroundColor: "rgba(79, 18, 28, 0.78)", borderColor: "rgba(255, 82, 82, 0.28)" },
+  bannerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 8 },
+  bannerTitle: { fontSize: 18, fontWeight: "900", color: "#FFFFFF" },
+  bannerCount: { fontSize: 12, fontWeight: "800", color: "rgba(255,255,255,0.82)" },
+  bannerMessage: { fontSize: 13, lineHeight: 20, color: "rgba(255,255,255,0.82)" },
   section: { marginBottom: 22, backgroundColor: "rgba(4, 16, 29, 0.34)", borderRadius: 28, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", paddingTop: 16, paddingBottom: 6, overflow: "hidden" },
   sectionHeader: { paddingHorizontal: 20, marginBottom: 14 },
   sectionHeadingRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },

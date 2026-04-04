@@ -15,7 +15,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useAttendances } from "@/hooks/use-attendances";
 import type { Attendance, AttendanceStatus, DelayReason } from "@/types/attendance";
-import { STATUS_LABELS, SERVICE_TYPE_LABELS, getNextStatus, validateLicensePlate, formatLicensePlate } from "@/types/attendance";
+import { STATUS_LABELS, SERVICE_TYPE_LABELS, getAttendancePrioritySnapshot, getNextStatus, validateLicensePlate, formatLicensePlate } from "@/types/attendance";
 
 const STATUS_SORT_ORDER: Record<AttendanceStatus, number> = { arrival: 0, waiting: 1, in_service: 2, completed: 3 };
 type StatusFeedback = { title: string; detail: string };
@@ -60,6 +60,8 @@ export default function AdminScreen() {
         return haystack.includes(q);
       })
       .sort((a, b) => {
+        const priorityDelta = getAttendancePrioritySnapshot(b).score - getAttendancePrioritySnapshot(a).score;
+        if (priorityDelta !== 0) return priorityDelta;
         const statusDelta = STATUS_SORT_ORDER[a.status] - STATUS_SORT_ORDER[b.status];
         if (statusDelta !== 0) return statusDelta;
         return Number(b.updatedAt) - Number(a.updatedAt);
@@ -141,7 +143,7 @@ export default function AdminScreen() {
 
   if (!user) {
     return (
-      <ThemedView style={[styles.container, { backgroundColor }]}> 
+      <ThemedView style={[styles.container, { backgroundColor }]}>
         <ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}>
           <View style={styles.header}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Área protegida para operação e gestão dos atendimentos</ThemedText></View>
           <AccessRequiredCard />
@@ -152,7 +154,7 @@ export default function AdminScreen() {
 
   if (!isOperator) {
     return (
-      <ThemedView style={[styles.container, { backgroundColor }]}> 
+      <ThemedView style={[styles.container, { backgroundColor }]}>
         <ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}>
           <View style={styles.header}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Seu perfil atual não possui acesso operacional.</ThemedText></View>
           <AccessRequiredCard title="Permissão insuficiente" description="Este painel é destinado a operadores e administradores do sistema." />
@@ -175,13 +177,24 @@ export default function AdminScreen() {
 
         <AdminOverview attendances={attendances} operationalMetrics={operationalMetrics} selectedFilter={selectedFilter} onFilterChange={setSelectedFilter} searchQuery={searchQuery} onSearchChange={setSearchQuery} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} />
 
-        <View style={styles.listHeader}><ThemedText style={styles.listTitle}>Fila operacional</ThemedText><ThemedText style={styles.listSubtitle}>{filteredAttendances.length} atendimento(s) encontrado(s){searchQuery.trim() ? " com a busca aplicada" : ""}</ThemedText></View>
+        <View style={styles.listHeader}><ThemedText style={styles.listTitle}>Fila operacional priorizada</ThemedText><ThemedText style={styles.listSubtitle}>{filteredAttendances.length} atendimento(s) encontrado(s){searchQuery.trim() ? " com a busca aplicada" : ""} • ordenação por SLA, atraso e estágio do fluxo</ThemedText></View>
 
         {loading ? <View style={styles.loadingContainer}><ActivityIndicator size="large" color={tintColor} /></View> : filteredAttendances.length === 0 ? <View style={styles.emptyState}><ThemedText style={styles.emptyText}>Nenhum atendimento encontrado com os filtros atuais.</ThemedText></View> : filteredAttendances.map((attendance) => (
-          <AdminAttendanceCard key={attendance.id} attendance={attendance} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} canDelete={isAdmin} onAdvance={() => handleUpdateStatus(attendance)} onViewHistory={() => setSelectedHistoryAttendance(attendance)} onManageGovernance={() => setSelectedGovernanceAttendance(attendance)} onDelete={isAdmin ? () => {
-            if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            Alert.alert("Remover Atendimento", `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`, [{ text: "Manter", style: "cancel" }, { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) }]);
-          } : undefined} />
+          <AdminAttendanceCard
+            key={attendance.id}
+            attendance={attendance}
+            cardBackground={cardBackground}
+            borderColor={borderColor}
+            tintColor={tintColor}
+            canDelete={isAdmin}
+            onAdvance={() => handleUpdateStatus(attendance)}
+            onViewHistory={() => setSelectedHistoryAttendance(attendance)}
+            onManageGovernance={() => setSelectedGovernanceAttendance(attendance)}
+            onDelete={isAdmin ? () => {
+              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              Alert.alert("Remover Atendimento", `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`, [{ text: "Manter", style: "cancel" }, { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) }]);
+            } : undefined}
+          />
         ))}
       </ScrollView>
 
