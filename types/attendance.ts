@@ -7,6 +7,7 @@ export type ServiceType = "tire" | "corrective" | "preventive";
 export type AttendanceHistoryChangeType = "created" | "status_changed" | "deleted";
 export type AttendanceHistoryActorRole = "system" | "operator" | "admin";
 export type CriticalQueueSeverity = "attention" | "critical";
+export type NotificationChannel = "whatsapp";
 
 export interface Attendance {
   id: string;
@@ -34,6 +35,30 @@ export interface AttendanceHistoryEntry {
   changedByEmail?: string;
   note?: string;
   createdAt: number;
+}
+
+export interface NotificationLogEntry {
+  id: string;
+  attendanceId: string;
+  channel: NotificationChannel;
+  status: AttendanceStatus;
+  phoneNumber?: string;
+  success: boolean;
+  providerMessageSid?: string;
+  errorMessage?: string;
+  triggeredByUserId?: string;
+  triggeredByRole: AttendanceHistoryActorRole;
+  triggeredByName?: string;
+  triggeredByEmail?: string;
+  createdAt: number;
+}
+
+export interface NotificationHealthSummary {
+  totalAttempts: number;
+  successfulAttempts: number;
+  failedAttempts: number;
+  successRate: number;
+  latestFailures: NotificationLogEntry[];
 }
 
 export interface CriticalAttendanceSignal {

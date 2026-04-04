@@ -33,6 +33,8 @@ export function useAttendances(options: UseAttendancesOptions = {}) {
     utils.attendances.liveList.invalidate();
     utils.attendances.history.invalidate();
     utils.attendances.metrics.invalidate();
+    utils.attendances.notificationHealth.invalidate();
+    utils.attendances.notificationLogs.invalidate();
   }, [utils]);
 
   const createMutation = trpc.attendances.create.useMutation({
@@ -88,6 +90,7 @@ export function useAttendances(options: UseAttendancesOptions = {}) {
     }
     utils.attendances.manageList.invalidate();
     utils.attendances.metrics.invalidate();
+    utils.attendances.notificationHealth.invalidate();
   }, [scope, utils]);
 
   const formattedAttendances = attendances.map((att) => ({

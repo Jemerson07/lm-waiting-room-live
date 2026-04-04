@@ -4,6 +4,7 @@ import {
   attendanceStatusHistory,
   attendances,
   InsertUser,
+  notificationLogs,
   users,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -52,6 +53,33 @@ async function recordAttendanceHistory(input: {
     changedByUserId: input.actor?.userId,
     changedByRole: input.actor?.role ?? "system",
     note: input.note,
+  });
+}
+
+async function recordNotificationLog(input: {
+  attendanceId: number;
+  status: DbAttendanceStatus;
+  phoneNumber?: string;
+  success: boolean;
+  providerMessageSid?: string;
+  errorMessage?: string;
+  actor?: HistoryActor;
+}) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.insert(notificationLogs).values({
+    attendanceId: input.attendanceId,
+    channel: "whatsapp",
+    status: input.status,
+    phoneNumber: input.phoneNumber,
+    success: input.success,
+    providerMessageSid: input.providerMessageSid,
+    errorMessage: input.errorMessage,
+    triggeredByUserId: input.actor?.userId,
+    triggeredByRole: input.actor?.role ?? "system",
   });
 }
 
@@ -211,6 +239,59 @@ export async function getAttendanceHistory(attendanceId: number) {
     .orderBy(desc(attendanceStatusHistory.createdAt), desc(attendanceStatusHistory.id));
 }
 
+export async function getNotificationLogs(filters?: { startAt?: Date; endAt?: Date; onlyFailures?: boolean }) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get notification logs: database not available");
+    return [];
+  }
+
+  const rows = await db
+    .select({
+      id: notificationLogs.id,
+      attendanceId: notificationLogs.attendanceId,
+      channel: notificationLogs.channel,
+      status: notificationLogs.status,
+      phoneNumber: notificationLogs.phoneNumber,
+      success: notificationLogs.success,
+      providerMessageSid: notificationLogs.providerMessageSid,
+      errorMessage: notificationLogs.errorMessage,
+      triggeredByUserId: notificationLogs.triggeredByUserId,
+      triggeredByRole: notificationLogs.triggeredByRole,
+      triggeredByName: users.name,
+      triggeredByEmail: users.email,
+      createdAt: notificationLogs.createdAt,
+    })
+    .from(notificationLogs)
+    .leftJoin(users, eq(notificationLogs.triggeredByUserId, users.id))
+    .orderBy(desc(notificationLogs.createdAt), desc(notificationLogs.id));
+
+  return rows.filter((row) => {
+    const createdAt = row.createdAt ? new Date(row.createdAt).getTime() : Date.now();
+    if (filters?.startAt && createdAt < filters.startAt.getTime()) return false;
+    if (filters?.endAt && createdAt > filters.endAt.getTime()) return false;
+    if (filters?.onlyFailures && row.success) return false;
+    return true;
+  });
+}
+
+export async function getNotificationHealthSummary(filters?: { startAt?: Date; endAt?: Date }) {
+  const rows = await getNotificationLogs(filters);
+  const totalAttempts = rows.length;
+  const successfulAttempts = rows.filter((row) => row.success).length;
+  const failedAttempts = totalAttempts - successfulAttempts;
+  const successRate = totalAttempts > 0 ? Math.round((successfulAttempts / totalAttempts) * 100) : 0;
+  const latestFailures = rows.filter((row) => !row.success).slice(0, 6);
+
+  return {
+    totalAttempts,
+    successfulAttempts,
+    failedAttempts,
+    successRate,
+    latestFailures,
+  };
+}
+
 export async function getPublicLiveAttendances() {
   const db = await getDb();
   if (!db) {
@@ -335,18 +416,28 @@ export async function updateAttendanceStatusWithWhatsApp(
   }
 
   if (sendWhatsApp && attendance.customerPhone) {
-    try {
-      const { sendStatusNotification } = await import("./whatsapp-service");
-      await sendStatusNotification(
-        attendance.customerPhone,
-        status,
-        attendance.licensePlate,
-        attendance.customerName || undefined,
-      );
+    const { sendStatusNotification } = await import("./whatsapp-service");
+    const notificationResult = await sendStatusNotification(
+      attendance.customerPhone,
+      status,
+      attendance.licensePlate,
+      attendance.customerName || undefined,
+    );
 
+    await recordNotificationLog({
+      attendanceId: attendance.id,
+      status,
+      phoneNumber: attendance.customerPhone,
+      success: notificationResult.success,
+      providerMessageSid: notificationResult.messageSid,
+      errorMessage: notificationResult.error,
+      actor,
+    });
+
+    if (notificationResult.success) {
       await db.update(attendances).set({ whatsappNotificationSent: status }).where(eq(attendances.id, id));
-    } catch (error) {
-      console.error("[WhatsApp] Erro ao enviar notificacao:", error);
+    } else {
+      console.error("[WhatsApp] Falha registrada no log de notificações:", notificationResult.error);
     }
   }
 }

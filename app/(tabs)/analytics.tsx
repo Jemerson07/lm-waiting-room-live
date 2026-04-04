@@ -36,6 +36,16 @@ function getAverage(values: number[]) {
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
+function formatLogDate(value: string | number | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function AnalyticsScreen() {
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
@@ -60,6 +70,11 @@ export default function AnalyticsScreen() {
   }, [attendances, dateRange]);
 
   const { data: operationalMetrics } = trpc.attendances.metrics.useQuery(
+    { startAt: dateRange.start, endAt: dateRange.end },
+    { enabled: Boolean(user && isAdmin), retry: false },
+  );
+
+  const { data: notificationHealth } = trpc.attendances.notificationHealth.useQuery(
     { startAt: dateRange.start, endAt: dateRange.end },
     { enabled: Boolean(user && isAdmin), retry: false },
   );
@@ -100,6 +115,12 @@ export default function AnalyticsScreen() {
     { title: "Em atendimento", value: `${operationalMetrics?.averageInServiceMinutes ?? 0} min`, subtitle: "Tempo médio de execução", color: "#FF6B00", icon: "🛠️" },
     { title: "Gargalo atual", value: operationalMetrics?.bottleneckStage ? STATUS_LABELS[operationalMetrics.bottleneckStage] : "Sem dados", subtitle: operationalMetrics?.bottleneckAverageMinutes ? `${operationalMetrics.bottleneckAverageMinutes} min de média` : "Aguardando mais histórico", color: "#7B1FA2", icon: "📍" },
   ], [operationalMetrics]);
+
+  const notificationCards: MetricCard[] = useMemo(() => [
+    { title: "Tentativas", value: notificationHealth?.totalAttempts ?? 0, subtitle: "Envios de WhatsApp no período", color: tintColor, icon: "📨" },
+    { title: "Sucesso", value: notificationHealth?.successfulAttempts ?? 0, subtitle: `${notificationHealth?.successRate ?? 0}% de taxa`, color: "#00C853", icon: "✅" },
+    { title: "Falhas", value: notificationHealth?.failedAttempts ?? 0, subtitle: "Requer atenção operacional", color: (notificationHealth?.failedAttempts ?? 0) > 0 ? "#B3261E" : "#00C853", icon: "⚠️" },
+  ], [notificationHealth, tintColor]);
 
   const handleExportAttendances = async () => {
     try {
@@ -198,7 +219,7 @@ export default function AnalyticsScreen() {
           </View>
         </View>
 
-        <View style={styles.exportSection}>
+        <View style={[styles.exportSection, { marginTop: 0 }]}>
           <ThemedText type="subtitle" style={styles.exportTitle}>Exportar relatórios</ThemedText>
           <View style={styles.exportButtons}>
             <Pressable style={[styles.exportButton, { backgroundColor: tintColor }]} onPress={handleExportAttendances}><ThemedText style={styles.exportButtonText}>Atendimentos</ThemedText></Pressable>
@@ -242,6 +263,39 @@ export default function AnalyticsScreen() {
           ) : (
             <View style={[styles.noCriticalSurface, { borderColor }]}> 
               <ThemedText style={styles.noCriticalText}>Nenhum atendimento acima do tempo alvo neste período filtrado.</ThemedText>
+            </View>
+          )}
+        </View>
+
+        <View style={[styles.notificationSurface, { backgroundColor: cardBackground }]}> 
+          <ThemedText type="subtitle" style={styles.notificationTitle}>Saúde das notificações</ThemedText>
+          <View style={styles.notificationGrid}>
+            {notificationCards.map((metric) => (
+              <View key={metric.title} style={styles.notificationCard}>
+                <ThemedText style={styles.notificationCardLabel}>{metric.icon} {metric.title}</ThemedText>
+                <ThemedText style={[styles.notificationCardValue, { color: metric.color }]}>{metric.value}</ThemedText>
+                {metric.subtitle ? <ThemedText style={styles.notificationCardSubtitle}>{metric.subtitle}</ThemedText> : null}
+              </View>
+            ))}
+          </View>
+
+          <ThemedText style={styles.notificationFailuresTitle}>Falhas recentes</ThemedText>
+          {notificationHealth?.latestFailures?.length ? (
+            notificationHealth.latestFailures.map((log) => (
+              <View key={log.id} style={[styles.failureItem, { borderColor }]}> 
+                <View style={styles.failureHeader}>
+                  <View>
+                    <ThemedText style={styles.failureTitle}>Atendimento #{log.attendanceId} · {STATUS_LABELS[log.status]}</ThemedText>
+                    <ThemedText style={styles.failureMeta}>{log.phoneNumber || "Sem telefone"} · {formatLogDate(log.createdAt)}</ThemedText>
+                  </View>
+                  <View style={styles.failureBadge}><ThemedText style={styles.failureBadgeText}>Falha</ThemedText></View>
+                </View>
+                <ThemedText style={styles.failureMessage}>{log.errorMessage || "Erro não informado pelo provedor"}</ThemedText>
+              </View>
+            ))
+          ) : (
+            <View style={[styles.noCriticalSurface, { borderColor }]}> 
+              <ThemedText style={styles.noCriticalText}>Nenhuma falha de notificação registrada neste período.</ThemedText>
             </View>
           )}
         </View>
@@ -301,4 +355,19 @@ const styles = StyleSheet.create({
   criticalDetails: { fontSize: 13, lineHeight: 20 },
   noCriticalSurface: { borderWidth: 1, borderRadius: 14, padding: 14 },
   noCriticalText: { fontSize: 13, opacity: 0.72 },
+  notificationSurface: { borderRadius: 16, padding: 20, marginBottom: 20 },
+  notificationTitle: { fontSize: 18, fontWeight: "600", marginBottom: 16 },
+  notificationGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 18 },
+  notificationCard: { width: (SCREEN_WIDTH - 76) / 3, minWidth: 180, backgroundColor: "rgba(0,0,0,0.03)", borderRadius: 14, padding: 14 },
+  notificationCardLabel: { fontSize: 12, opacity: 0.66, marginBottom: 8, fontWeight: "700" },
+  notificationCardValue: { fontSize: 24, fontWeight: "800", marginBottom: 6 },
+  notificationCardSubtitle: { fontSize: 11, opacity: 0.6, lineHeight: 17 },
+  notificationFailuresTitle: { fontSize: 15, fontWeight: "800", marginBottom: 10 },
+  failureItem: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 10 },
+  failureHeader: { flexDirection: "row", justifyContent: "space-between", gap: 10, marginBottom: 6, alignItems: "center" },
+  failureTitle: { fontSize: 14, fontWeight: "800" },
+  failureMeta: { fontSize: 12, opacity: 0.66 },
+  failureBadge: { backgroundColor: "rgba(179,38,30,0.12)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  failureBadgeText: { fontSize: 11, fontWeight: "800", color: "#B3261E" },
+  failureMessage: { fontSize: 13, lineHeight: 20 },
 });

@@ -14,6 +14,11 @@ function toHistoryActor(user: { id: number; role: string }) {
   } as const;
 }
 
+const dateRangeInput = z.object({
+  startAt: z.date().optional(),
+  endAt: z.date().optional(),
+}).optional();
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -61,14 +66,29 @@ export const appRouter = router({
         return db.getAttendanceHistory(input.attendanceId);
       }),
     metrics: operatorProcedure
+      .input(dateRangeInput)
+      .query(async ({ input }) => {
+        return getOperationalMetrics({ startAt: input?.startAt, endAt: input?.endAt });
+      }),
+    notificationHealth: adminProcedure
+      .input(dateRangeInput)
+      .query(async ({ input }) => {
+        return db.getNotificationHealthSummary({ startAt: input?.startAt, endAt: input?.endAt });
+      }),
+    notificationLogs: adminProcedure
       .input(
         z.object({
           startAt: z.date().optional(),
           endAt: z.date().optional(),
+          onlyFailures: z.boolean().optional(),
         }).optional(),
       )
       .query(async ({ input }) => {
-        return getOperationalMetrics({ startAt: input?.startAt, endAt: input?.endAt });
+        return db.getNotificationLogs({
+          startAt: input?.startAt,
+          endAt: input?.endAt,
+          onlyFailures: input?.onlyFailures,
+        });
       }),
     create: operatorProcedure
       .input(

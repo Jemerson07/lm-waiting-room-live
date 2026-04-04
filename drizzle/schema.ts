@@ -1,9 +1,10 @@
-import { int, index, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { boolean, int, index, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 const attendanceStatusValues = ["arrival", "waiting", "in_service", "completed"] as const;
 const serviceTypeValues = ["tire", "corrective", "preventive"] as const;
 const whatsappNotificationValues = ["none", "arrival", "waiting", "in_service", "completed"] as const;
 const attendanceHistoryChangeTypeValues = ["created", "status_changed", "deleted"] as const;
+const notificationChannelValues = ["whatsapp"] as const;
 
 /**
  * Core user table backing auth flow.
@@ -80,3 +81,32 @@ export const attendanceStatusHistory = mysqlTable(
 
 export type AttendanceStatusHistory = typeof attendanceStatusHistory.$inferSelect;
 export type InsertAttendanceStatusHistory = typeof attendanceStatusHistory.$inferInsert;
+
+/**
+ * Log de notificações operacionais para rastrear tentativas, falhas e sucesso do canal.
+ */
+export const notificationLogs = mysqlTable(
+  "notification_logs",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    attendanceId: int("attendanceId").notNull(),
+    channel: mysqlEnum("channel", notificationChannelValues).notNull(),
+    status: mysqlEnum("status", attendanceStatusValues).notNull(),
+    phoneNumber: varchar("phoneNumber", { length: 24 }),
+    success: boolean("success").notNull().default(false),
+    providerMessageSid: varchar("providerMessageSid", { length: 128 }),
+    errorMessage: text("errorMessage"),
+    triggeredByUserId: int("triggeredByUserId"),
+    triggeredByRole: varchar("triggeredByRole", { length: 32 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    attendanceIdx: index("notification_logs_attendance_idx").on(table.attendanceId),
+    createdAtIdx: index("notification_logs_created_at_idx").on(table.createdAt),
+    successIdx: index("notification_logs_success_idx").on(table.success),
+    statusIdx: index("notification_logs_status_idx").on(table.status),
+  }),
+);
+
+export type NotificationLog = typeof notificationLogs.$inferSelect;
+export type InsertNotificationLog = typeof notificationLogs.$inferInsert;
