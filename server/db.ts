@@ -1,4 +1,4 @@
-import { desc, eq, leftJoin } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   attendanceStatusHistory,
@@ -7,10 +7,11 @@ import {
   notificationLogs,
   users,
 } from "../drizzle/schema";
+import { getAttendancePrioritySnapshot } from "../types/attendance";
 import { ENV } from "./_core/env";
 
 type DbAttendanceStatus = "arrival" | "waiting" | "in_service" | "completed";
-type AttendanceHistoryChangeType = "created" | "status_changed" | "deleted" | "governance_updated";
+type AttendanceHistoryChangeType = "created" | "status_changed" | "deleted" | "governance_updated" | "assignment_updated";
 type AttendanceHistoryActorRole = "system" | "operator" | "admin";
 type DelayReason =
   | "none"
@@ -85,6 +86,33 @@ async function recordNotificationLog(input: {
     errorMessage: input.errorMessage,
     triggeredByUserId: input.actor?.userId,
     triggeredByRole: input.actor?.role ?? "system",
+  });
+}
+
+function normalizeOperatorRole(role: string | null | undefined) {
+  return role === "admin" ? "admin" : "operator";
+}
+
+async function withAssignedOperatorMeta<T extends { assignedOperatorId?: number | null }>(rows: T[]) {
+  const assignedIds = [...new Set(rows.map((row) => row.assignedOperatorId).filter((value): value is number => typeof value === "number"))];
+  if (!assignedIds.length) {
+    return rows.map((row) => ({
+      ...row,
+      assignedOperatorName: null,
+      assignedOperatorEmail: null,
+    }));
+  }
+
+  const operatorRows = await Promise.all(assignedIds.map((id) => getUserById(id)));
+  const operatorMap = new Map(operatorRows.filter(Boolean).map((user) => [user!.id, user!]));
+
+  return rows.map((row) => {
+    const assignedOperator = row.assignedOperatorId ? operatorMap.get(row.assignedOperatorId) : null;
+    return {
+      ...row,
+      assignedOperatorName: assignedOperator?.name ?? null,
+      assignedOperatorEmail: assignedOperator?.email ?? null,
+    };
   });
 }
 
@@ -196,7 +224,8 @@ export async function getAllAttendances() {
     console.warn("[Database] Cannot get attendances: database not available");
     return [];
   }
-  return db.select().from(attendances);
+  const rows = await db.select().from(attendances);
+  return withAssignedOperatorMeta(rows);
 }
 
 export async function getAttendanceHistory(attendanceId: number) {
@@ -206,7 +235,7 @@ export async function getAttendanceHistory(attendanceId: number) {
     return [];
   }
 
-  return db
+  const historyRows = await db
     .select({
       id: attendanceStatusHistory.id,
       attendanceId: attendanceStatusHistory.attendanceId,
@@ -215,15 +244,25 @@ export async function getAttendanceHistory(attendanceId: number) {
       changeType: attendanceStatusHistory.changeType,
       changedByUserId: attendanceStatusHistory.changedByUserId,
       changedByRole: attendanceStatusHistory.changedByRole,
-      changedByName: users.name,
-      changedByEmail: users.email,
       note: attendanceStatusHistory.note,
       createdAt: attendanceStatusHistory.createdAt,
     })
     .from(attendanceStatusHistory)
-    .leftJoin(users, eq(attendanceStatusHistory.changedByUserId, users.id))
     .where(eq(attendanceStatusHistory.attendanceId, attendanceId))
     .orderBy(desc(attendanceStatusHistory.createdAt), desc(attendanceStatusHistory.id));
+
+  const actorIds = [...new Set(historyRows.map((entry) => entry.changedByUserId).filter((value): value is number => typeof value === "number"))];
+  const actorRows = await Promise.all(actorIds.map((id) => getUserById(id)));
+  const actorMap = new Map(actorRows.filter(Boolean).map((user) => [user!.id, user!]));
+
+  return historyRows.map((row) => {
+    const actor = row.changedByUserId ? actorMap.get(row.changedByUserId) : null;
+    return {
+      ...row,
+      changedByName: actor?.name ?? null,
+      changedByEmail: actor?.email ?? null,
+    };
+  });
 }
 
 export async function getNotificationLogs(filters?: { startAt?: Date; endAt?: Date; onlyFailures?: boolean }) {
@@ -245,21 +284,31 @@ export async function getNotificationLogs(filters?: { startAt?: Date; endAt?: Da
       errorMessage: notificationLogs.errorMessage,
       triggeredByUserId: notificationLogs.triggeredByUserId,
       triggeredByRole: notificationLogs.triggeredByRole,
-      triggeredByName: users.name,
-      triggeredByEmail: users.email,
       createdAt: notificationLogs.createdAt,
     })
     .from(notificationLogs)
-    .leftJoin(users, eq(notificationLogs.triggeredByUserId, users.id))
     .orderBy(desc(notificationLogs.createdAt), desc(notificationLogs.id));
 
-  return rows.filter((row) => {
-    const createdAt = row.createdAt ? new Date(row.createdAt).getTime() : Date.now();
-    if (filters?.startAt && createdAt < filters.startAt.getTime()) return false;
-    if (filters?.endAt && createdAt > filters.endAt.getTime()) return false;
-    if (filters?.onlyFailures && row.success) return false;
-    return true;
-  });
+  const actorIds = [...new Set(rows.map((row) => row.triggeredByUserId).filter((value): value is number => typeof value === "number"))];
+  const actorRows = await Promise.all(actorIds.map((id) => getUserById(id)));
+  const actorMap = new Map(actorRows.filter(Boolean).map((user) => [user!.id, user!]));
+
+  return rows
+    .map((row) => {
+      const actor = row.triggeredByUserId ? actorMap.get(row.triggeredByUserId) : null;
+      return {
+        ...row,
+        triggeredByName: actor?.name ?? null,
+        triggeredByEmail: actor?.email ?? null,
+      };
+    })
+    .filter((row) => {
+      const createdAt = row.createdAt ? new Date(row.createdAt).getTime() : Date.now();
+      if (filters?.startAt && createdAt < filters.startAt.getTime()) return false;
+      if (filters?.endAt && createdAt > filters.endAt.getTime()) return false;
+      if (filters?.onlyFailures && row.success) return false;
+      return true;
+    });
 }
 
 export async function getNotificationHealthSummary(filters?: { startAt?: Date; endAt?: Date }) {
@@ -270,6 +319,41 @@ export async function getNotificationHealthSummary(filters?: { startAt?: Date; e
   const successRate = totalAttempts > 0 ? Math.round((successfulAttempts / totalAttempts) * 100) : 0;
   const latestFailures = rows.filter((row) => !row.success).slice(0, 6);
   return { totalAttempts, successfulAttempts, failedAttempts, successRate, latestFailures };
+}
+
+export async function getDispatchBoard() {
+  const operatorRows = await getAllUsers();
+  const attendanceRows = await getAllAttendances();
+  const activeAttendances = attendanceRows.filter((attendance) => attendance.status !== "completed");
+
+  const operators = operatorRows
+    .map((user) => {
+      const assignedAttendances = activeAttendances.filter((attendance) => attendance.assignedOperatorId === user.id);
+      const criticalCount = assignedAttendances.filter((attendance) => getAttendancePrioritySnapshot(attendance).level === "critical").length;
+      const attentionCount = assignedAttendances.filter((attendance) => getAttendancePrioritySnapshot(attendance).level === "attention").length;
+      return {
+        userId: String(user.id),
+        name: user.name ?? user.email ?? `Usuário ${user.id}`,
+        email: user.email ?? undefined,
+        role: normalizeOperatorRole(user.role),
+        activeCount: assignedAttendances.length,
+        criticalCount,
+        attentionCount,
+        assignedAttendanceIds: assignedAttendances.map((attendance) => String(attendance.id)),
+      };
+    })
+    .filter((operator) => operator.activeCount > 0 || operator.role === "admin" || operator.name)
+    .sort((a, b) => {
+      if (b.activeCount !== a.activeCount) return b.activeCount - a.activeCount;
+      if (b.criticalCount !== a.criticalCount) return b.criticalCount - a.criticalCount;
+      return a.name.localeCompare(b.name, "pt-BR");
+    });
+
+  return {
+    assignedCount: activeAttendances.filter((attendance) => attendance.assignedOperatorId).length,
+    unassignedCount: activeAttendances.filter((attendance) => !attendance.assignedOperatorId).length,
+    operators,
+  };
 }
 
 export async function getPublicLiveAttendances() {
@@ -322,6 +406,8 @@ export async function createAttendance(
       whatsappNotificationSent: "none",
       delayReason: "none",
       slaExceptionActive: false,
+      assignedOperatorId: actor?.userId,
+      assignedAt: actor?.userId ? new Date() : null,
     })
     .$returningId();
 
@@ -335,6 +421,18 @@ export async function createAttendance(
       actor,
       note: "Atendimento criado no painel administrativo.",
     });
+
+    if (actor?.userId) {
+      const createdBy = await getUserById(actor.userId);
+      await recordAttendanceHistory({
+        attendanceId,
+        fromStatus: null,
+        toStatus: "arrival",
+        changeType: "assignment_updated",
+        actor,
+        note: `Atendimento assumido automaticamente por ${createdBy?.name ?? createdBy?.email ?? "operador"} na criação.`,
+      });
+    }
   }
 
   return inserted;
@@ -374,7 +472,43 @@ export async function updateAttendanceGovernance(
   });
 
   const updated = await db.select().from(attendances).where(eq(attendances.id, id)).limit(1);
-  return updated[0];
+  const withMeta = await withAssignedOperatorMeta(updated);
+  return withMeta[0];
+}
+
+export async function updateAttendanceAssignment(id: number, assignedOperatorId: number | null, actor?: HistoryActor) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.select().from(attendances).where(eq(attendances.id, id)).limit(1);
+  const attendance = result[0];
+  if (!attendance) throw new Error("Attendance not found");
+
+  const previousOperator = attendance.assignedOperatorId ? await getUserById(attendance.assignedOperatorId) : null;
+  const nextOperator = assignedOperatorId ? await getUserById(assignedOperatorId) : null;
+  if (assignedOperatorId && !nextOperator) throw new Error("Operador responsável não encontrado");
+  if ((attendance.assignedOperatorId ?? null) === assignedOperatorId) return (await withAssignedOperatorMeta([attendance]))[0];
+
+  await db.update(attendances).set({ assignedOperatorId, assignedAt: assignedOperatorId ? new Date() : null }).where(eq(attendances.id, id));
+
+  const note = assignedOperatorId
+    ? previousOperator
+      ? `Responsável alterado de ${previousOperator.name ?? previousOperator.email ?? "operador"} para ${nextOperator?.name ?? nextOperator?.email ?? "operador"}.`
+      : `Atendimento assumido por ${nextOperator?.name ?? nextOperator?.email ?? "operador"}.`
+    : `Responsável ${previousOperator?.name ?? previousOperator?.email ?? "operador"} liberou o atendimento.`;
+
+  await recordAttendanceHistory({
+    attendanceId: attendance.id,
+    fromStatus: attendance.status,
+    toStatus: attendance.status,
+    changeType: "assignment_updated",
+    actor,
+    note,
+  });
+
+  const updated = await db.select().from(attendances).where(eq(attendances.id, id)).limit(1);
+  const withMeta = await withAssignedOperatorMeta(updated);
+  return withMeta[0];
 }
 
 export async function deleteAttendance(id: number, actor?: HistoryActor) {

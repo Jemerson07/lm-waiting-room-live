@@ -14,35 +14,16 @@ import { trpc } from "@/lib/trpc";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useAttendances } from "@/hooks/use-attendances";
-import type { Attendance, AttendanceStatus, DelayReason, OperationalPriorityLevel } from "@/types/attendance";
-import {
-  STATUS_LABELS,
-  SERVICE_TYPE_LABELS,
-  getAttendancePrioritySnapshot,
-  getNextStatus,
-  validateLicensePlate,
-  formatLicensePlate,
-} from "@/types/attendance";
+import type { Attendance, AttendanceStatus, DelayReason, DispatchOperatorLoad, OperationalPriorityLevel } from "@/types/attendance";
+import { DISPATCH_ROLE_LABELS, STATUS_LABELS, SERVICE_TYPE_LABELS, getAttendancePrioritySnapshot, getNextStatus, validateLicensePlate, formatLicensePlate } from "@/types/attendance";
 
 type StatusFeedback = { title: string; detail: string };
 
 const PRIORITY_ORDER: OperationalPriorityLevel[] = ["critical", "attention", "normal"];
 const PRIORITY_SECTION_META: Record<OperationalPriorityLevel, { title: string; subtitle: string; color: string }> = {
-  critical: {
-    title: "Prioridade máxima",
-    subtitle: "Casos que devem ser tratados primeiro para reduzir risco operacional e SLA estourado.",
-    color: "#B3261E",
-  },
-  attention: {
-    title: "Atenção operacional",
-    subtitle: "Atendimentos que merecem ação coordenada antes que virem caso crítico.",
-    color: "#B54708",
-  },
-  normal: {
-    title: "Fluxo normal",
-    subtitle: "Atendimentos estabilizados, ainda acompanhados pela fila inteligente.",
-    color: "#1C7C54",
-  },
+  critical: { title: "Prioridade máxima", subtitle: "Casos que devem ser tratados primeiro para reduzir risco operacional e SLA estourado.", color: "#B3261E" },
+  attention: { title: "Atenção operacional", subtitle: "Atendimentos que merecem ação coordenada antes que virem caso crítico.", color: "#B54708" },
+  normal: { title: "Fluxo normal", subtitle: "Atendimentos estabilizados, ainda acompanhados pela fila inteligente.", color: "#1C7C54" },
 };
 
 function sortAttendancesByPriority(items: Attendance[]) {
@@ -60,8 +41,9 @@ export default function AdminScreen() {
   const cardBackground = useThemeColor({}, "cardBackground");
   const borderColor = useThemeColor({}, "border");
   const { user, roleLabel, isAdmin, isOperator, loading: userLoading } = useCurrentUser();
-  const { attendances, loading, createAttendance, updateAttendanceStatus, updateAttendanceGovernance, deleteAttendance } = useAttendances({ scope: "manage", enabled: Boolean(user && isOperator) });
+  const { attendances, loading, createAttendance, updateAttendanceStatus, updateAttendanceGovernance, assignAttendance, deleteAttendance } = useAttendances({ scope: "manage", enabled: Boolean(user && isOperator) });
   const { data: operationalMetrics } = trpc.attendances.metrics.useQuery(undefined, { enabled: Boolean(user && isOperator), retry: false, refetchInterval: 5000 });
+  const { data: dispatchBoard } = trpc.attendances.dispatchBoard.useQuery(undefined, { enabled: Boolean(user && isOperator), retry: false, refetchInterval: 5000 });
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [selectedHistoryAttendance, setSelectedHistoryAttendance] = useState<Attendance | null>(null);
@@ -90,17 +72,7 @@ export default function AdminScreen() {
         .filter((a) => selectedFilter === "all" || a.status === selectedFilter)
         .filter((a) => {
           if (!q) return true;
-          const haystack = [
-            a.licensePlate,
-            a.vehicleModel,
-            a.customerName || "",
-            a.description || "",
-            a.operationalNote || "",
-            STATUS_LABELS[a.status] || a.status,
-            SERVICE_TYPE_LABELS[a.serviceType] || a.serviceType,
-          ]
-            .join(" ")
-            .toLowerCase();
+          const haystack = [a.licensePlate, a.vehicleModel, a.customerName || "", a.description || "", a.operationalNote || "", a.assignedOperatorName || "", STATUS_LABELS[a.status] || a.status, SERVICE_TYPE_LABELS[a.serviceType] || a.serviceType].join(" ").toLowerCase();
           return haystack.includes(q);
         }),
     );
@@ -111,12 +83,12 @@ export default function AdminScreen() {
   const recommendedPriority = recommendedAttendance ? getAttendancePrioritySnapshot(recommendedAttendance) : null;
   const groupedPriorityQueues = useMemo(() => {
     const groups: Record<OperationalPriorityLevel, Attendance[]> = { critical: [], attention: [], normal: [] };
-    activeAttendances.forEach((attendance) => {
-      groups[getAttendancePrioritySnapshot(attendance).level].push(attendance);
-    });
+    activeAttendances.forEach((attendance) => { groups[getAttendancePrioritySnapshot(attendance).level].push(attendance); });
     return groups;
   }, [activeAttendances]);
   const completedAttendances = useMemo(() => filteredAttendances.filter((attendance) => attendance.status === "completed"), [filteredAttendances]);
+  const currentOperatorLoad = useMemo(() => dispatchBoard?.operators.find((operator) => operator.userId === String(user?.id)) ?? null, [dispatchBoard?.operators, user?.id]);
+  const topOperators = useMemo(() => dispatchBoard?.operators.slice(0, 6) ?? [], [dispatchBoard?.operators]);
 
   const resetForm = () => {
     setShowNewModal(false);
@@ -136,14 +108,7 @@ export default function AdminScreen() {
 
     try {
       setSubmitting(true);
-      await createAttendance({
-        licensePlate: formatLicensePlate(licensePlate),
-        vehicleModel,
-        serviceType,
-        customerName: customerName.trim() || undefined,
-        customerPhone: customerPhone.trim() || undefined,
-        description: description.trim() || undefined,
-      });
+      await createAttendance({ licensePlate: formatLicensePlate(licensePlate), vehicleModel, serviceType, customerName: customerName.trim() || undefined, customerPhone: customerPhone.trim() || undefined, description: description.trim() || undefined });
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setStatusFeedback({ title: "Atendimento criado", detail: `${formatLicensePlate(licensePlate)} entrou no fluxo operacional.` });
       Alert.alert("Sucesso!", `Atendimento criado para ${formatLicensePlate(licensePlate)}`, [{ text: "OK" }]);
@@ -173,13 +138,42 @@ export default function AdminScreen() {
     if (!nextStatus) {
       return Alert.alert("Atendimento concluído", `O atendimento de ${attendance.licensePlate} já está finalizado e continua salvo para histórico e relatórios.`, [{ text: "OK" }]);
     }
-
     try {
       await updateAttendanceStatus(Number(attendance.id), nextStatus);
       if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setStatusFeedback({ title: `${attendance.licensePlate} avançou`, detail: `${STATUS_LABELS[attendance.status]} → ${STATUS_LABELS[nextStatus]}` });
     } catch {
       Alert.alert("Erro", "Não foi possível atualizar o status");
+    }
+  };
+
+  const handleAssignToMe = async (attendance: Attendance) => {
+    if (!user?.id) return;
+    const action = async () => {
+      try {
+        await assignAttendance(Number(attendance.id), Number(user.id));
+        if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setStatusFeedback({ title: `${attendance.licensePlate} assumido`, detail: attendance.assignedOperatorName ? `Responsável anterior: ${attendance.assignedOperatorName}. Agora está na sua carga.` : "Atendimento adicionado à sua carga." });
+      } catch {
+        Alert.alert("Erro", "Não foi possível assumir este atendimento.");
+      }
+    };
+
+    if (attendance.assignedOperatorName && attendance.assignedOperatorId !== String(user.id)) {
+      Alert.alert("Reassumir atendimento", `Este atendimento está com ${attendance.assignedOperatorName}. Deseja assumir para sua carga?`, [{ text: "Cancelar", style: "cancel" }, { text: "Assumir", onPress: action }]);
+      return;
+    }
+
+    await action();
+  };
+
+  const handleReleaseAssignment = async (attendance: Attendance) => {
+    try {
+      await assignAttendance(Number(attendance.id), null);
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setStatusFeedback({ title: `${attendance.licensePlate} liberado`, detail: "O atendimento voltou para a fila sem responsável definido." });
+    } catch {
+      Alert.alert("Erro", "Não foi possível liberar este atendimento.");
     }
   };
 
@@ -194,140 +188,55 @@ export default function AdminScreen() {
     }
   };
 
-  if (userLoading) {
-    return <ThemedView style={[styles.container, { backgroundColor }]}><View style={styles.loadingContainer}><ActivityIndicator size="large" color={tintColor} /></View></ThemedView>;
-  }
-
-  if (!user) {
-    return (
-      <ThemedView style={[styles.container, { backgroundColor }]}>
-        <ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}>
-          <View style={styles.header}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Área protegida para operação e gestão dos atendimentos</ThemedText></View>
-          <AccessRequiredCard />
-        </ScrollView>
-      </ThemedView>
-    );
-  }
-
-  if (!isOperator) {
-    return (
-      <ThemedView style={[styles.container, { backgroundColor }]}>
-        <ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}>
-          <View style={styles.header}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Seu perfil atual não possui acesso operacional.</ThemedText></View>
-          <AccessRequiredCard title="Permissão insuficiente" description="Este painel é destinado a operadores e administradores do sistema." />
-        </ScrollView>
-      </ThemedView>
-    );
-  }
+  if (userLoading) return <ThemedView style={[styles.container, { backgroundColor }]}><View style={styles.loadingContainer}><ActivityIndicator size="large" color={tintColor} /></View></ThemedView>;
+  if (!user) return <ThemedView style={[styles.container, { backgroundColor }]}><ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}><View style={styles.header}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Área protegida para operação e gestão dos atendimentos</ThemedText></View><AccessRequiredCard /></ScrollView></ThemedView>;
+  if (!isOperator) return <ThemedView style={[styles.container, { backgroundColor }]}><ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}><View style={styles.header}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Seu perfil atual não possui acesso operacional.</ThemedText></View><AccessRequiredCard title="Permissão insuficiente" description="Este painel é destinado a operadores e administradores do sistema." /></ScrollView></ThemedView>;
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor }]}>
+    <ThemedView style={[styles.container, { backgroundColor }]}> 
       <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 80 }]}>
-        <View style={styles.header}>
-          <View style={styles.headerRow}>
-            <View style={styles.headerTextBlock}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Gerencie os atendimentos com fila inteligente em tempo real</ThemedText></View>
-            <View style={[styles.roleBadge, { backgroundColor: isAdmin ? "rgba(0, 200, 83, 0.12)" : "rgba(0, 82, 163, 0.10)" }]}><ThemedText style={[styles.roleBadgeText, { color: isAdmin ? "#1C7C54" : "#0052A3" }]}>{roleLabel}</ThemedText></View>
-          </View>
-        </View>
+        <View style={styles.header}><View style={styles.headerRow}><View style={styles.headerTextBlock}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Gerencie os atendimentos com fila inteligente e despacho em equipe</ThemedText></View><View style={[styles.roleBadge, { backgroundColor: isAdmin ? "rgba(0, 200, 83, 0.12)" : "rgba(0, 82, 163, 0.10)" }]}><ThemedText style={[styles.roleBadgeText, { color: isAdmin ? "#1C7C54" : "#0052A3" }]}>{roleLabel}</ThemedText></View></View></View>
 
         {statusFeedback ? <View style={[styles.feedbackBanner, { backgroundColor: cardBackground, borderColor }]}><View style={[styles.feedbackDot, { backgroundColor: tintColor }]} /><View style={styles.feedbackTextBlock}><ThemedText style={styles.feedbackTitle}>{statusFeedback.title}</ThemedText><ThemedText style={styles.feedbackDetail}>{statusFeedback.detail}</ThemedText></View></View> : null}
 
         <AdminOverview attendances={attendances} operationalMetrics={operationalMetrics} selectedFilter={selectedFilter} onFilterChange={setSelectedFilter} searchQuery={searchQuery} onSearchChange={setSearchQuery} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} />
 
-        {recommendedAttendance && recommendedPriority ? (
-          <View style={[styles.recommendedSurface, { backgroundColor: cardBackground, borderColor: recommendedPriority.level === "critical" ? "rgba(179,38,30,0.25)" : recommendedPriority.level === "attention" ? "rgba(181,71,8,0.25)" : borderColor }]}>
-            <View style={styles.recommendedHeader}><View style={[styles.recommendedDot, { backgroundColor: recommendedPriority.level === "critical" ? "#B3261E" : recommendedPriority.level === "attention" ? "#B54708" : "#1C7C54" }]} /><ThemedText style={styles.recommendedTitle}>Atender agora</ThemedText></View>
-            <ThemedText style={styles.recommendedPlate}>{recommendedAttendance.licensePlate} · {recommendedAttendance.vehicleModel}</ThemedText>
-            <ThemedText style={styles.recommendedReason}>{recommendedPriority.reason}</ThemedText>
-            <ThemedText style={styles.recommendedAction}>Ação sugerida: {recommendedPriority.actionLabel}</ThemedText>
+        {dispatchBoard ? (
+          <View style={[styles.dispatchSurface, { backgroundColor: cardBackground, borderColor }]}> 
+            <View style={styles.dispatchHeader}><ThemedText style={styles.dispatchTitle}>Despacho operacional</ThemedText><ThemedText style={styles.dispatchSubtitle}>{dispatchBoard.assignedCount} atribuídos · {dispatchBoard.unassignedCount} sem responsável</ThemedText></View>
+            {currentOperatorLoad ? <View style={styles.myLoadCard}><ThemedText style={styles.myLoadLabel}>Minha carga</ThemedText><ThemedText style={styles.myLoadValue}>{currentOperatorLoad.activeCount} atendimento(s)</ThemedText><ThemedText style={styles.myLoadHelper}>Críticos {currentOperatorLoad.criticalCount} · Atenção {currentOperatorLoad.attentionCount}</ThemedText></View> : null}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.operatorRow}>
+              {topOperators.map((operator: DispatchOperatorLoad) => (
+                <View key={operator.userId} style={[styles.operatorCard, { borderColor }]}> 
+                  <View style={styles.operatorTopRow}><ThemedText style={styles.operatorName}>{operator.name}</ThemedText><View style={styles.operatorRoleBadge}><ThemedText style={styles.operatorRoleText}>{DISPATCH_ROLE_LABELS[operator.role]}</ThemedText></View></View>
+                  <ThemedText style={styles.operatorMeta}>{operator.activeCount} ativo(s)</ThemedText>
+                  <ThemedText style={styles.operatorMeta}>Críticos {operator.criticalCount} · Atenção {operator.attentionCount}</ThemedText>
+                </View>
+              ))}
+            </ScrollView>
           </View>
         ) : null}
 
-        <View style={styles.listHeader}><ThemedText style={styles.listTitle}>Fila inteligente</ThemedText><ThemedText style={styles.listSubtitle}>{filteredAttendances.length} atendimento(s) encontrado(s){searchQuery.trim() ? " com a busca aplicada" : ""} • agrupados por prioridade operacional</ThemedText></View>
+        {recommendedAttendance && recommendedPriority ? <View style={[styles.recommendedSurface, { backgroundColor: cardBackground, borderColor: recommendedPriority.level === "critical" ? "rgba(179,38,30,0.25)" : recommendedPriority.level === "attention" ? "rgba(181,71,8,0.25)" : borderColor }]}><View style={styles.recommendedHeader}><View style={[styles.recommendedDot, { backgroundColor: recommendedPriority.level === "critical" ? "#B3261E" : recommendedPriority.level === "attention" ? "#B54708" : "#1C7C54" }]} /><ThemedText style={styles.recommendedTitle}>Atender agora</ThemedText></View><ThemedText style={styles.recommendedPlate}>{recommendedAttendance.licensePlate} · {recommendedAttendance.vehicleModel}</ThemedText><ThemedText style={styles.recommendedReason}>{recommendedPriority.reason}</ThemedText><ThemedText style={styles.recommendedAction}>Ação sugerida: {recommendedPriority.actionLabel}</ThemedText></View> : null}
 
-        {loading ? (
-          <View style={styles.loadingContainer}><ActivityIndicator size="large" color={tintColor} /></View>
-        ) : filteredAttendances.length === 0 ? (
-          <View style={styles.emptyState}><ThemedText style={styles.emptyText}>Nenhum atendimento encontrado com os filtros atuais.</ThemedText></View>
-        ) : (
-          <>
-            {PRIORITY_ORDER.map((priorityLevel) => {
-              const items = groupedPriorityQueues[priorityLevel];
-              if (!items.length) return null;
-              const sectionMeta = PRIORITY_SECTION_META[priorityLevel];
-              return (
-                <View key={priorityLevel} style={styles.prioritySection}>
-                  <View style={styles.prioritySectionHeader}>
-                    <View style={[styles.prioritySectionDot, { backgroundColor: sectionMeta.color }]} />
-                    <View style={styles.prioritySectionTextBlock}>
-                      <ThemedText style={styles.prioritySectionTitle}>{sectionMeta.title}</ThemedText>
-                      <ThemedText style={styles.prioritySectionSubtitle}>{sectionMeta.subtitle}</ThemedText>
-                    </View>
-                    <View style={styles.prioritySectionBadge}><ThemedText style={styles.prioritySectionBadgeText}>{items.length}</ThemedText></View>
-                  </View>
-                  {items.map((attendance, index) => (
-                    <AdminAttendanceCard
-                      key={attendance.id}
-                      attendance={attendance}
-                      cardBackground={cardBackground}
-                      borderColor={borderColor}
-                      tintColor={tintColor}
-                      canDelete={isAdmin}
-                      highlightRecommended={recommendedAttendance?.id === attendance.id}
-                      queuePosition={index + 1}
-                      onAdvance={() => handleUpdateStatus(attendance)}
-                      onViewHistory={() => setSelectedHistoryAttendance(attendance)}
-                      onManageGovernance={() => setSelectedGovernanceAttendance(attendance)}
-                      onDelete={isAdmin ? () => {
-                        if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        Alert.alert("Remover Atendimento", `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`, [{ text: "Manter", style: "cancel" }, { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) }]);
-                      } : undefined}
-                    />
-                  ))}
-                </View>
-              );
-            })}
+        <View style={styles.listHeader}><ThemedText style={styles.listTitle}>Fila inteligente</ThemedText><ThemedText style={styles.listSubtitle}>{filteredAttendances.length} atendimento(s) encontrado(s){searchQuery.trim() ? " com a busca aplicada" : ""} • agrupados por prioridade e responsável</ThemedText></View>
 
-            {completedAttendances.length > 0 ? (
-              <View style={styles.prioritySection}>
-                <View style={styles.prioritySectionHeader}>
-                  <View style={[styles.prioritySectionDot, { backgroundColor: "#1C7C54" }]} />
-                  <View style={styles.prioritySectionTextBlock}>
-                    <ThemedText style={styles.prioritySectionTitle}>Histórico concluído</ThemedText>
-                    <ThemedText style={styles.prioritySectionSubtitle}>Atendimentos finalizados e mantidos para consulta e auditoria.</ThemedText>
-                  </View>
-                  <View style={styles.prioritySectionBadge}><ThemedText style={styles.prioritySectionBadgeText}>{completedAttendances.length}</ThemedText></View>
-                </View>
-                {completedAttendances.map((attendance, index) => (
-                  <AdminAttendanceCard
-                    key={attendance.id}
-                    attendance={attendance}
-                    cardBackground={cardBackground}
-                    borderColor={borderColor}
-                    tintColor={tintColor}
-                    canDelete={isAdmin}
-                    queuePosition={index + 1}
-                    onAdvance={() => handleUpdateStatus(attendance)}
-                    onViewHistory={() => setSelectedHistoryAttendance(attendance)}
-                    onManageGovernance={() => setSelectedGovernanceAttendance(attendance)}
-                    onDelete={isAdmin ? () => {
-                      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      Alert.alert("Remover Atendimento", `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`, [{ text: "Manter", style: "cancel" }, { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) }]);
-                    } : undefined}
-                  />
-                ))}
-              </View>
-            ) : null}
-          </>
-        )}
+        {loading ? <View style={styles.loadingContainer}><ActivityIndicator size="large" color={tintColor} /></View> : filteredAttendances.length === 0 ? <View style={styles.emptyState}><ThemedText style={styles.emptyText}>Nenhum atendimento encontrado com os filtros atuais.</ThemedText></View> : <>
+          {PRIORITY_ORDER.map((priorityLevel) => {
+            const items = groupedPriorityQueues[priorityLevel];
+            if (!items.length) return null;
+            const sectionMeta = PRIORITY_SECTION_META[priorityLevel];
+            return <View key={priorityLevel} style={styles.prioritySection}><View style={styles.prioritySectionHeader}><View style={[styles.prioritySectionDot, { backgroundColor: sectionMeta.color }]} /><View style={styles.prioritySectionTextBlock}><ThemedText style={styles.prioritySectionTitle}>{sectionMeta.title}</ThemedText><ThemedText style={styles.prioritySectionSubtitle}>{sectionMeta.subtitle}</ThemedText></View><View style={styles.prioritySectionBadge}><ThemedText style={styles.prioritySectionBadgeText}>{items.length}</ThemedText></View></View>{items.map((attendance, index) => <AdminAttendanceCard key={attendance.id} attendance={attendance} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} currentUserId={String(user.id)} canDelete={isAdmin} highlightRecommended={recommendedAttendance?.id === attendance.id} queuePosition={index + 1} onAdvance={() => handleUpdateStatus(attendance)} onViewHistory={() => setSelectedHistoryAttendance(attendance)} onManageGovernance={() => setSelectedGovernanceAttendance(attendance)} onAssignToMe={() => handleAssignToMe(attendance)} onReleaseAssignment={() => handleReleaseAssignment(attendance)} onDelete={isAdmin ? () => { if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Alert.alert("Remover Atendimento", `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`, [{ text: "Manter", style: "cancel" }, { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) }]); } : undefined} />)}</View>;
+          })}
+
+          {completedAttendances.length > 0 ? <View style={styles.prioritySection}><View style={styles.prioritySectionHeader}><View style={[styles.prioritySectionDot, { backgroundColor: "#1C7C54" }]} /><View style={styles.prioritySectionTextBlock}><ThemedText style={styles.prioritySectionTitle}>Histórico concluído</ThemedText><ThemedText style={styles.prioritySectionSubtitle}>Atendimentos finalizados e mantidos para consulta e auditoria.</ThemedText></View><View style={styles.prioritySectionBadge}><ThemedText style={styles.prioritySectionBadgeText}>{completedAttendances.length}</ThemedText></View></View>{completedAttendances.map((attendance, index) => <AdminAttendanceCard key={attendance.id} attendance={attendance} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} currentUserId={String(user.id)} canDelete={isAdmin} queuePosition={index + 1} onAdvance={() => handleUpdateStatus(attendance)} onViewHistory={() => setSelectedHistoryAttendance(attendance)} onManageGovernance={() => setSelectedGovernanceAttendance(attendance)} onAssignToMe={() => handleAssignToMe(attendance)} onReleaseAssignment={() => handleReleaseAssignment(attendance)} onDelete={isAdmin ? () => { if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Alert.alert("Remover Atendimento", `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`, [{ text: "Manter", style: "cancel" }, { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) }]); } : undefined} />)}</View> : null}
+        </>}
       </ScrollView>
 
       <Pressable style={[styles.fab, { backgroundColor: tintColor, bottom: Math.max(insets.bottom, 20) + 60 }]} onPress={() => setShowNewModal(true)}><ThemedText style={styles.fabText}>+</ThemedText></Pressable>
 
       <AdminCreateAttendanceModal visible={showNewModal} onClose={() => setShowNewModal(false)} onSubmit={handleCreateAttendance} backgroundColor={backgroundColor} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} submitting={submitting} licensePlate={licensePlate} setLicensePlate={setLicensePlate} vehicleModel={vehicleModel} setVehicleModel={setVehicleModel} serviceType={serviceType} setServiceType={setServiceType} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} description={description} setDescription={setDescription} />
-
       <AttendanceHistoryModal visible={Boolean(selectedHistoryAttendance)} attendanceId={selectedHistoryAttendance?.id} licensePlate={selectedHistoryAttendance?.licensePlate} onClose={() => setSelectedHistoryAttendance(null)} backgroundColor={backgroundColor} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} />
-
       <AttendanceGovernanceModal visible={Boolean(selectedGovernanceAttendance)} attendance={selectedGovernanceAttendance} onClose={() => setSelectedGovernanceAttendance(null)} backgroundColor={backgroundColor} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} onSave={handleUpdateGovernance} />
     </ThemedView>
   );
@@ -348,6 +257,21 @@ const styles = StyleSheet.create({
   feedbackTextBlock: { flex: 1 },
   feedbackTitle: { fontSize: 14, fontWeight: "800", marginBottom: 4 },
   feedbackDetail: { fontSize: 13, opacity: 0.72 },
+  dispatchSurface: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 18 },
+  dispatchHeader: { marginBottom: 12 },
+  dispatchTitle: { fontSize: 16, fontWeight: "900", marginBottom: 4 },
+  dispatchSubtitle: { fontSize: 13, opacity: 0.72 },
+  myLoadCard: { backgroundColor: "rgba(0,0,0,0.03)", borderRadius: 14, padding: 12, marginBottom: 12 },
+  myLoadLabel: { fontSize: 12, opacity: 0.65, marginBottom: 6, fontWeight: "700" },
+  myLoadValue: { fontSize: 20, fontWeight: "900", marginBottom: 4 },
+  myLoadHelper: { fontSize: 12, opacity: 0.72 },
+  operatorRow: { gap: 12 },
+  operatorCard: { minWidth: 190, borderWidth: 1, borderRadius: 14, padding: 12 },
+  operatorTopRow: { flexDirection: "row", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 6 },
+  operatorName: { fontSize: 14, fontWeight: "800", flex: 1 },
+  operatorRoleBadge: { backgroundColor: "rgba(0,0,0,0.05)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
+  operatorRoleText: { fontSize: 10, fontWeight: "800" },
+  operatorMeta: { fontSize: 12, opacity: 0.72, marginBottom: 2 },
   recommendedSurface: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 18 },
   recommendedHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
   recommendedDot: { width: 12, height: 12, borderRadius: 6 },

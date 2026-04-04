@@ -4,7 +4,7 @@
 
 export type AttendanceStatus = "arrival" | "waiting" | "in_service" | "completed";
 export type ServiceType = "tire" | "corrective" | "preventive";
-export type AttendanceHistoryChangeType = "created" | "status_changed" | "deleted" | "governance_updated";
+export type AttendanceHistoryChangeType = "created" | "status_changed" | "deleted" | "governance_updated" | "assignment_updated";
 export type AttendanceHistoryActorRole = "system" | "operator" | "admin";
 export type CriticalQueueSeverity = "attention" | "critical";
 export type NotificationChannel = "whatsapp";
@@ -19,6 +19,7 @@ export type DelayReason =
   | "other";
 export type SlaSeverity = "on_track" | "risk" | "breached" | "exempt";
 export type OperationalPriorityLevel = "normal" | "attention" | "critical";
+export type DispatchRole = "admin" | "operator";
 
 export interface Attendance {
   id: string;
@@ -34,6 +35,10 @@ export interface Attendance {
   operationalNote?: string;
   slaExceptionActive: boolean;
   slaExceptionReason?: string;
+  assignedOperatorId?: string;
+  assignedOperatorName?: string;
+  assignedOperatorEmail?: string;
+  assignedAt?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -135,6 +140,23 @@ export interface AttendancePrioritySnapshot {
   actionLabel: string;
 }
 
+export interface DispatchOperatorLoad {
+  userId: string;
+  name: string;
+  email?: string;
+  role: DispatchRole;
+  activeCount: number;
+  criticalCount: number;
+  attentionCount: number;
+  assignedAttendanceIds: string[];
+}
+
+export interface DispatchBoardSnapshot {
+  assignedCount: number;
+  unassignedCount: number;
+  operators: DispatchOperatorLoad[];
+}
+
 export interface AttendanceFormData {
   licensePlate: string;
   vehicleModel: string;
@@ -168,6 +190,7 @@ export const ATTENDANCE_HISTORY_CHANGE_LABELS: Record<AttendanceHistoryChangeTyp
   status_changed: "Mudança de status",
   deleted: "Remoção",
   governance_updated: "Governança",
+  assignment_updated: "Despacho",
 };
 
 export const ATTENDANCE_HISTORY_ACTOR_LABELS: Record<AttendanceHistoryActorRole, string> = {
@@ -203,6 +226,11 @@ export const PRIORITY_LEVEL_LABELS: Record<OperationalPriorityLevel, string> = {
   normal: "Fluxo normal",
   attention: "Atenção operacional",
   critical: "Prioridade máxima",
+};
+
+export const DISPATCH_ROLE_LABELS: Record<DispatchRole, string> = {
+  admin: "Administrador",
+  operator: "Operador",
 };
 
 export const SERVICE_TYPE_SLA_TARGETS: Record<ServiceType, number> = {

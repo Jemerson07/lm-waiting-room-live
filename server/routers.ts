@@ -14,21 +14,8 @@ function toHistoryActor(user: { id: number; role: string }) {
   } as const;
 }
 
-const dateRangeInput = z.object({
-  startAt: z.date().optional(),
-  endAt: z.date().optional(),
-}).optional();
-
-const delayReasonEnum = z.enum([
-  "none",
-  "customer_unavailable",
-  "parts_wait",
-  "approval_pending",
-  "high_demand",
-  "diagnosis_extended",
-  "system_issue",
-  "other",
-]);
+const dateRangeInput = z.object({ startAt: z.date().optional(), endAt: z.date().optional() }).optional();
+const delayReasonEnum = z.enum(["none", "customer_unavailable", "parts_wait", "approval_pending", "high_demand", "diagnosis_extended", "system_issue", "other"]);
 
 export const appRouter = router({
   system: systemRouter,
@@ -41,41 +28,24 @@ export const appRouter = router({
     }),
   }),
   users: router({
-    list: adminProcedure.query(async () => {
-      return db.getAllUsers();
-    }),
+    list: adminProcedure.query(async () => db.getAllUsers()),
     updateRole: adminProcedure
-      .input(
-        z.object({
-          userId: z.number(),
-          role: z.enum(["user", "admin"]),
-        }),
-      )
+      .input(z.object({ userId: z.number(), role: z.enum(["user", "admin"]) }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.id === input.userId) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode alterar seu próprio papel." });
         }
-
         const updatedUser = await db.updateUserRole(input.userId, input.role);
         return { success: true, user: updatedUser };
       }),
   }),
   attendances: router({
-    liveList: publicProcedure.query(async () => {
-      return db.getPublicLiveAttendances();
-    }),
-    manageList: operatorProcedure.query(async () => {
-      return db.getAllAttendances();
-    }),
-    history: operatorProcedure
-      .input(z.object({ attendanceId: z.number() }))
-      .query(async ({ input }) => db.getAttendanceHistory(input.attendanceId)),
-    metrics: operatorProcedure
-      .input(dateRangeInput)
-      .query(async ({ input }) => getOperationalMetrics({ startAt: input?.startAt, endAt: input?.endAt })),
-    notificationHealth: adminProcedure
-      .input(dateRangeInput)
-      .query(async ({ input }) => db.getNotificationHealthSummary({ startAt: input?.startAt, endAt: input?.endAt })),
+    liveList: publicProcedure.query(async () => db.getPublicLiveAttendances()),
+    manageList: operatorProcedure.query(async () => db.getAllAttendances()),
+    history: operatorProcedure.input(z.object({ attendanceId: z.number() })).query(async ({ input }) => db.getAttendanceHistory(input.attendanceId)),
+    metrics: operatorProcedure.input(dateRangeInput).query(async ({ input }) => getOperationalMetrics({ startAt: input?.startAt, endAt: input?.endAt })),
+    dispatchBoard: operatorProcedure.query(async () => db.getDispatchBoard()),
+    notificationHealth: adminProcedure.input(dateRangeInput).query(async ({ input }) => db.getNotificationHealthSummary({ startAt: input?.startAt, endAt: input?.endAt })),
     notificationLogs: adminProcedure
       .input(z.object({ startAt: z.date().optional(), endAt: z.date().optional(), onlyFailures: z.boolean().optional() }).optional())
       .query(async ({ input }) => db.getNotificationLogs({ startAt: input?.startAt, endAt: input?.endAt, onlyFailures: input?.onlyFailures })),
@@ -95,6 +65,9 @@ export const appRouter = router({
           slaExceptionReason: input.slaExceptionReason,
         }, toHistoryActor(ctx.user));
       }),
+    assign: operatorProcedure
+      .input(z.object({ id: z.number(), assignedOperatorId: z.number().nullable() }))
+      .mutation(async ({ ctx, input }) => db.updateAttendanceAssignment(input.id, input.assignedOperatorId, toHistoryActor(ctx.user))),
     updateStatus: operatorProcedure
       .input(z.object({ id: z.number(), status: z.enum(["arrival", "waiting", "in_service", "completed"]), sendWhatsApp: z.boolean().optional().default(true) }))
       .mutation(async ({ ctx, input }) => {

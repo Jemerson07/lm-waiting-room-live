@@ -33,6 +33,7 @@ export function useAttendances(options: UseAttendancesOptions = {}) {
     utils.attendances.liveList.invalidate();
     utils.attendances.history.invalidate();
     utils.attendances.metrics.invalidate();
+    utils.attendances.dispatchBoard.invalidate();
     utils.attendances.notificationHealth.invalidate();
     utils.attendances.notificationLogs.invalidate();
   }, [utils]);
@@ -41,8 +42,9 @@ export function useAttendances(options: UseAttendancesOptions = {}) {
   const updateStatusMutation = trpc.attendances.updateStatus.useMutation({ onSuccess: invalidateAttendanceQueries });
   const deleteMutation = trpc.attendances.delete.useMutation({ onSuccess: invalidateAttendanceQueries });
   const updateGovernanceMutation = trpc.attendances.updateGovernance.useMutation({ onSuccess: invalidateAttendanceQueries });
+  const assignMutation = trpc.attendances.assign.useMutation({ onSuccess: invalidateAttendanceQueries });
 
-  const createAttendance = useCallback(async (data: { licensePlate: string; vehicleModel: string; serviceType: "tire" | "corrective" | "preventive"; customerName?: string; customerPhone?: string; description?: string; }) => {
+  const createAttendance = useCallback(async (data: { licensePlate: string; vehicleModel: string; serviceType: "tire" | "corrective" | "preventive"; customerName?: string; customerPhone?: string; description?: string }) => {
     await createMutation.mutateAsync(data);
   }, [createMutation]);
 
@@ -50,9 +52,13 @@ export function useAttendances(options: UseAttendancesOptions = {}) {
     await updateStatusMutation.mutateAsync({ id, status });
   }, [updateStatusMutation]);
 
-  const updateAttendanceGovernance = useCallback(async (data: { id: number; delayReason: DelayReason; operationalNote?: string; slaExceptionActive: boolean; slaExceptionReason?: string; }) => {
+  const updateAttendanceGovernance = useCallback(async (data: { id: number; delayReason: DelayReason; operationalNote?: string; slaExceptionActive: boolean; slaExceptionReason?: string }) => {
     await updateGovernanceMutation.mutateAsync(data);
   }, [updateGovernanceMutation]);
+
+  const assignAttendance = useCallback(async (id: number, assignedOperatorId: number | null) => {
+    await assignMutation.mutateAsync({ id, assignedOperatorId });
+  }, [assignMutation]);
 
   const deleteAttendance = useCallback(async (id: number) => {
     await deleteMutation.mutateAsync({ id });
@@ -65,6 +71,7 @@ export function useAttendances(options: UseAttendancesOptions = {}) {
     }
     utils.attendances.manageList.invalidate();
     utils.attendances.metrics.invalidate();
+    utils.attendances.dispatchBoard.invalidate();
     utils.attendances.notificationHealth.invalidate();
   }, [scope, utils]);
 
@@ -81,6 +88,10 @@ export function useAttendances(options: UseAttendancesOptions = {}) {
     operationalNote: "operationalNote" in att ? att.operationalNote ?? undefined : undefined,
     slaExceptionActive: "slaExceptionActive" in att ? Boolean(att.slaExceptionActive) : false,
     slaExceptionReason: "slaExceptionReason" in att ? att.slaExceptionReason ?? undefined : undefined,
+    assignedOperatorId: "assignedOperatorId" in att && att.assignedOperatorId != null ? String(att.assignedOperatorId) : undefined,
+    assignedOperatorName: "assignedOperatorName" in att ? att.assignedOperatorName ?? undefined : undefined,
+    assignedOperatorEmail: "assignedOperatorEmail" in att ? att.assignedOperatorEmail ?? undefined : undefined,
+    assignedAt: "assignedAt" in att && att.assignedAt ? new Date(att.assignedAt).getTime() : undefined,
     createdAt: new Date(att.createdAt).getTime(),
     updatedAt: new Date(att.updatedAt).getTime(),
   }));
@@ -91,6 +102,7 @@ export function useAttendances(options: UseAttendancesOptions = {}) {
     createAttendance,
     updateAttendanceStatus,
     updateAttendanceGovernance,
+    assignAttendance,
     deleteAttendance,
     reload,
   };

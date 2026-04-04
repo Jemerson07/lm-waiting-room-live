@@ -3,7 +3,7 @@ import { boolean, int, index, mysqlEnum, mysqlTable, text, timestamp, varchar } 
 const attendanceStatusValues = ["arrival", "waiting", "in_service", "completed"] as const;
 const serviceTypeValues = ["tire", "corrective", "preventive"] as const;
 const whatsappNotificationValues = ["none", "arrival", "waiting", "in_service", "completed"] as const;
-const attendanceHistoryChangeTypeValues = ["created", "status_changed", "deleted", "governance_updated"] as const;
+const attendanceHistoryChangeTypeValues = ["created", "status_changed", "deleted", "governance_updated", "assignment_updated"] as const;
 const notificationChannelValues = ["whatsapp"] as const;
 const delayReasonValues = [
   "none",
@@ -16,11 +16,6 @@ const delayReasonValues = [
   "other",
 ] as const;
 
-/**
- * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
- */
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
@@ -36,9 +31,6 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-/**
- * Tabela de atendimentos veiculares
- */
 export const attendances = mysqlTable(
   "attendances",
   {
@@ -50,13 +42,13 @@ export const attendances = mysqlTable(
     status: mysqlEnum("status", attendanceStatusValues).default("arrival").notNull(),
     serviceType: mysqlEnum("serviceType", serviceTypeValues).notNull(),
     description: text("description"),
-    whatsappNotificationSent: mysqlEnum("whatsappNotificationSent", whatsappNotificationValues)
-      .default("none")
-      .notNull(),
+    whatsappNotificationSent: mysqlEnum("whatsappNotificationSent", whatsappNotificationValues).default("none").notNull(),
     delayReason: mysqlEnum("delayReason", delayReasonValues).default("none").notNull(),
     operationalNote: text("operationalNote"),
     slaExceptionActive: boolean("slaExceptionActive").default(false).notNull(),
     slaExceptionReason: text("slaExceptionReason"),
+    assignedOperatorId: int("assignedOperatorId"),
+    assignedAt: timestamp("assignedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
@@ -66,15 +58,13 @@ export const attendances = mysqlTable(
     updatedAtIdx: index("attendances_updated_at_idx").on(table.updatedAt),
     delayReasonIdx: index("attendances_delay_reason_idx").on(table.delayReason),
     slaExceptionIdx: index("attendances_sla_exception_idx").on(table.slaExceptionActive),
+    assignedOperatorIdx: index("attendances_assigned_operator_idx").on(table.assignedOperatorId),
   }),
 );
 
 export type Attendance = typeof attendances.$inferSelect;
 export type InsertAttendance = typeof attendances.$inferInsert;
 
-/**
- * Histórico de mudanças de status para auditoria e governança.
- */
 export const attendanceStatusHistory = mysqlTable(
   "attendance_status_history",
   {
@@ -98,9 +88,6 @@ export const attendanceStatusHistory = mysqlTable(
 export type AttendanceStatusHistory = typeof attendanceStatusHistory.$inferSelect;
 export type InsertAttendanceStatusHistory = typeof attendanceStatusHistory.$inferInsert;
 
-/**
- * Log de notificações operacionais para rastrear tentativas, falhas e sucesso do canal.
- */
 export const notificationLogs = mysqlTable(
   "notification_logs",
   {

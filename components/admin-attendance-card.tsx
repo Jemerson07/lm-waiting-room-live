@@ -21,9 +21,12 @@ interface AdminAttendanceCardProps {
   cardBackground: string;
   borderColor: string;
   tintColor: string;
+  currentUserId?: string;
   onAdvance: () => void;
   onViewHistory: () => void;
   onManageGovernance: () => void;
+  onAssignToMe: () => void;
+  onReleaseAssignment: () => void;
   onDelete?: () => void;
   canDelete?: boolean;
   highlightRecommended?: boolean;
@@ -40,9 +43,12 @@ export function AdminAttendanceCard({
   cardBackground,
   borderColor,
   tintColor,
+  currentUserId,
   onAdvance,
   onViewHistory,
   onManageGovernance,
+  onAssignToMe,
+  onReleaseAssignment,
   onDelete,
   canDelete = false,
   highlightRecommended = false,
@@ -56,6 +62,8 @@ export function AdminAttendanceCard({
   const updatedLabel = new Date(Number(attendance.updatedAt)).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   const priorityColor = priority.level === "critical" ? "#B3261E" : priority.level === "attention" ? "#B54708" : "#1C7C54";
   const priorityBackground = priority.level === "critical" ? "rgba(179,38,30,0.12)" : priority.level === "attention" ? "rgba(181,71,8,0.12)" : "rgba(0,200,83,0.10)";
+  const isAssignedToMe = attendance.assignedOperatorId && currentUserId ? attendance.assignedOperatorId === currentUserId : false;
+  const hasAssignee = Boolean(attendance.assignedOperatorId);
 
   return (
     <View style={[styles.card, { backgroundColor: cardBackground, borderColor: highlightRecommended ? tintColor : borderColor }]}>
@@ -95,6 +103,29 @@ export function AdminAttendanceCard({
           {attendance.customerName ? <View style={styles.customerChip}><ThemedText style={styles.customerChipText}>Cliente: {attendance.customerName}</ThemedText></View> : null}
           {attendance.delayReason !== "none" ? <View style={styles.delayChip}><ThemedText style={styles.delayChipText}>{DELAY_REASON_LABELS[attendance.delayReason]}</ThemedText></View> : null}
           {!canDelete ? <View style={styles.permissionChip}><ThemedText style={styles.permissionChipText}>Exclusão: admin</ThemedText></View> : null}
+        </View>
+
+        <View style={styles.assignmentSurface}>
+          <View style={styles.assignmentHeader}>
+            <ThemedText style={styles.assignmentLabel}>Despacho atual</ThemedText>
+            {attendance.assignedAt ? <ThemedText style={styles.assignmentTime}>Assumido {getElapsedTime(attendance.assignedAt)}</ThemedText> : null}
+          </View>
+          <ThemedText style={styles.assignmentValue}>
+            {attendance.assignedOperatorName
+              ? isAssignedToMe
+                ? `${attendance.assignedOperatorName} (você)`
+                : attendance.assignedOperatorName
+              : "Sem responsável definido"}
+          </ThemedText>
+          <View style={styles.assignmentActions}>
+            {!isCompleted ? (
+              hasAssignee && isAssignedToMe ? (
+                <Pressable style={[styles.assignmentButton, { borderColor }]} onPress={onReleaseAssignment}><ThemedText style={styles.assignmentButtonText}>Liberar</ThemedText></Pressable>
+              ) : (
+                <Pressable style={[styles.assignmentButton, { backgroundColor: tintColor }]} onPress={onAssignToMe}><ThemedText style={styles.assignmentButtonPrimaryText}>{hasAssignee ? "Assumir para mim" : "Assumir"}</ThemedText></Pressable>
+              )
+            ) : null}
+          </View>
         </View>
 
         {attendance.description ? <ThemedText style={styles.description} numberOfLines={2}>{attendance.description}</ThemedText> : null}
@@ -157,6 +188,15 @@ const styles = StyleSheet.create({
   delayChipText: { fontSize: 12, fontWeight: "700", color: "#A35B00" },
   permissionChip: { backgroundColor: "rgba(255, 107, 0, 0.10)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   permissionChipText: { fontSize: 12, fontWeight: "700", color: "#B54708" },
+  assignmentSurface: { backgroundColor: "rgba(0,0,0,0.035)", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12 },
+  assignmentHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6 },
+  assignmentLabel: { fontSize: 11, fontWeight: "700", opacity: 0.66 },
+  assignmentTime: { fontSize: 11, fontWeight: "700", opacity: 0.6 },
+  assignmentValue: { fontSize: 13, fontWeight: "800", marginBottom: 8 },
+  assignmentActions: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
+  assignmentButton: { minHeight: 38, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1, justifyContent: "center", alignItems: "center" },
+  assignmentButtonText: { fontSize: 12, fontWeight: "800" },
+  assignmentButtonPrimaryText: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
   description: { fontSize: 14, opacity: 0.72, marginBottom: 12 },
   noteSurface: { backgroundColor: "rgba(0,0,0,0.035)", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12 },
   noteTitle: { fontSize: 11, fontWeight: "700", opacity: 0.66, marginBottom: 4 },
