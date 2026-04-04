@@ -16,7 +16,6 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { useAttendances } from "@/hooks/use-attendances";
 import type { Attendance, AttendanceStatus, DelayReason, OperationalPriorityLevel } from "@/types/attendance";
 import {
-  PRIORITY_LEVEL_LABELS,
   STATUS_LABELS,
   SERVICE_TYPE_LABELS,
   getAttendancePrioritySnapshot,
