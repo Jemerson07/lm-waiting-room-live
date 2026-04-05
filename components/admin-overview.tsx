@@ -1,6 +1,6 @@
 import { StyleSheet, View, ScrollView, Pressable, TextInput, Dimensions } from "react-native";
 import { ThemedText } from "@/components/themed-text";
-import type { Attendance, AttendanceOperationalMetrics, AttendanceStatus } from "@/types/attendance";
+import type { Attendance, AttendanceOperationalMetrics, AttendanceStatus, DelayReason } from "@/types/attendance";
 import {
   CRITICAL_QUEUE_SEVERITY_LABELS,
   DELAY_REASON_LABELS,
@@ -24,18 +24,57 @@ interface AdminOverviewProps {
   tintColor: string;
 }
 
-export function AdminOverview({ attendances, operationalMetrics, selectedFilter, onFilterChange, searchQuery, onSearchChange, cardBackground, borderColor, tintColor }: AdminOverviewProps) {
+function getStartOfTodayTimestamp() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today.getTime();
+}
+
+function getDominantDelayReason(items: Attendance[]): DelayReason | null {
+  const counts = items
+    .filter((attendance) => attendance.delayReason !== "none")
+    .reduce<Record<string, number>>((acc, attendance) => {
+      acc[attendance.delayReason] = (acc[attendance.delayReason] ?? 0) + 1;
+      return acc;
+    }, {});
+
+  const [topEntry] = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  return (topEntry?.[0] as DelayReason | undefined) ?? null;
+}
+
+function formatTime(value: number) {
+  return new Date(Number(value)).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+export function AdminOverview({
+  attendances,
+  operationalMetrics,
+  selectedFilter,
+  onFilterChange,
+  searchQuery,
+  onSearchChange,
+  cardBackground,
+  borderColor,
+  tintColor,
+}: AdminOverviewProps) {
+  const todayStartTimestamp = getStartOfTodayTimestamp();
   const total = attendances.length;
   const completed = attendances.filter((a) => a.status === "completed").length;
   const inService = attendances.filter((a) => a.status === "in_service").length;
   const activeItems = attendances.filter((a) => a.status !== "completed");
   const active = total - completed;
-  const criticalQueueCount = operationalMetrics?.criticalQueueCount ?? 0;
   const criticalPriorityCount = activeItems.filter((a) => getAttendancePrioritySnapshot(a).level === "critical").length;
   const attentionPriorityCount = activeItems.filter((a) => getAttendancePrioritySnapshot(a).level === "attention").length;
   const normalPriorityCount = activeItems.filter((a) => getAttendancePrioritySnapshot(a).level === "normal").length;
   const recommendedAttendance = [...activeItems].sort((a, b) => getAttendancePrioritySnapshot(b).score - getAttendancePrioritySnapshot(a).score)[0];
   const recommendedPriority = recommendedAttendance ? getAttendancePrioritySnapshot(recommendedAttendance) : null;
+  const completedToday = attendances.filter((attendance) => attendance.status === "completed" && Number(attendance.updatedAt) >= todayStartTimestamp).length;
+  const delayedActiveCount = activeItems.filter((attendance) => attendance.delayReason !== "none").length;
+  const slaExceptionsActiveCount = activeItems.filter((attendance) => attendance.slaExceptionActive).length;
+  const activeSlaPressureCount = (operationalMetrics?.activeSlaRiskCount ?? 0) + (operationalMetrics?.activeSlaBreachedCount ?? 0);
+  const missingPhoneCount = activeItems.filter((attendance) => !attendance.customerPhone?.trim()).length;
+  const dominantDelayReason = getDominantDelayReason(activeItems);
+  const recentOperationalTouches = [...activeItems].sort((a, b) => Number(b.updatedAt) - Number(a.updatedAt)).slice(0, 3);
 
   const summaryCards = [
     { title: "Total", value: total, subtitle: "Atendimentos registrados", color: tintColor },
@@ -44,6 +83,14 @@ export function AdminOverview({ attendances, operationalMetrics, selectedFilter,
     { title: "Atenção", value: attentionPriorityCount, subtitle: "Perto do limite", color: attentionPriorityCount > 0 ? "#B54708" : "#00C853" },
     { title: "Em atendimento", value: inService, subtitle: "Demandas em execução", color: "#FF6B00" },
     { title: "Fluxo normal", value: normalPriorityCount, subtitle: "Sem urgência alta", color: "#1C7C54" },
+  ];
+
+  const radarCards = [
+    { title: "Concluídos hoje", value: completedToday, subtitle: "Atualizados hoje", color: "#00C853" },
+    { title: "Atrasos ativos", value: delayedActiveCount, subtitle: "Com motivo registrado", color: delayedActiveCount > 0 ? "#B54708" : "#00C853" },
+    { title: "Pressão de SLA", value: activeSlaPressureCount, subtitle: "Em risco + estourados", color: activeSlaPressureCount > 0 ? "#B3261E" : "#00C853" },
+    { title: "Exceções ativas", value: slaExceptionsActiveCount, subtitle: "Fora da meta padrão", color: slaExceptionsActiveCount > 0 ? "#7B1FA2" : "#00C853" },
+    { title: "Sem telefone", value: missingPhoneCount, subtitle: "Sem canal de WhatsApp", color: missingPhoneCount > 0 ? "#0052A3" : "#00C853" },
   ];
 
   return (
@@ -59,7 +106,7 @@ export function AdminOverview({ attendances, operationalMetrics, selectedFilter,
       </View>
 
       {recommendedAttendance && recommendedPriority ? (
-        <View style={[styles.recommendedSurface, { backgroundColor: cardBackground, borderColor: recommendedPriority.level === "critical" ? "rgba(179,38,30,0.25)" : recommendedPriority.level === "attention" ? "rgba(181,71,8,0.25)" : borderColor }]}> 
+        <View style={[styles.recommendedSurface, { backgroundColor: cardBackground, borderColor: recommendedPriority.level === "critical" ? "rgba(179,38,30,0.25)" : recommendedPriority.level === "attention" ? "rgba(181,71,8,0.25)" : borderColor }]}>
           <View style={styles.recommendedHeaderRow}>
             <View>
               <ThemedText style={styles.recommendedLabel}>Próximo atendimento recomendado</ThemedText>
@@ -73,6 +120,63 @@ export function AdminOverview({ attendances, operationalMetrics, selectedFilter,
           <ThemedText style={styles.recommendedAction}>Ação sugerida: {recommendedPriority.actionLabel}</ThemedText>
         </View>
       ) : null}
+
+      <View style={[styles.radarSurface, { backgroundColor: cardBackground, borderColor }]}>
+        <View style={styles.radarHeaderRow}>
+          <View style={styles.radarHeaderTextBlock}>
+            <ThemedText style={styles.radarTitle}>Radar operacional do dia</ThemedText>
+            <ThemedText style={styles.radarSubtitle}>Resumo rápido do que exige resposta mais imediata da operação.</ThemedText>
+          </View>
+          <View style={[styles.radarBadge, { backgroundColor: activeSlaPressureCount > 0 ? "rgba(179,38,30,0.12)" : "rgba(0,200,83,0.12)" }]}>
+            <ThemedText style={[styles.radarBadgeText, { color: activeSlaPressureCount > 0 ? "#B3261E" : "#1C7C54" }]}>
+              {activeSlaPressureCount > 0 ? "Operação pressionada" : "Operação estável"}
+            </ThemedText>
+          </View>
+        </View>
+
+        <View style={styles.radarGrid}>
+          {radarCards.map((card) => (
+            <View key={card.title} style={styles.radarCard}>
+              <ThemedText style={styles.radarCardTitle}>{card.title}</ThemedText>
+              <ThemedText style={[styles.radarCardValue, { color: card.color }]}>{card.value}</ThemedText>
+              <ThemedText style={styles.radarCardSubtitle}>{card.subtitle}</ThemedText>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.radarHighlightsRow}>
+          <View style={styles.radarHighlightCard}>
+            <ThemedText style={styles.radarHighlightLabel}>Motivo dominante de atraso</ThemedText>
+            <ThemedText style={styles.radarHighlightValue}>
+              {dominantDelayReason ? DELAY_REASON_LABELS[dominantDelayReason] : "Sem atrasos ativos"}
+            </ThemedText>
+            <ThemedText style={styles.radarHighlightHelper}>
+              {dominantDelayReason
+                ? "Use este motivo para agir no gargalo que mais aparece agora."
+                : "Nenhum atendimento ativo com bloqueio formal registrado."}
+            </ThemedText>
+          </View>
+
+          <View style={styles.radarHighlightCard}>
+            <ThemedText style={styles.radarHighlightLabel}>Últimas movimentações</ThemedText>
+            {recentOperationalTouches.length > 0 ? (
+              recentOperationalTouches.map((attendance) => (
+                <View key={attendance.id} style={styles.touchItem}>
+                  <View style={styles.touchItemTextBlock}>
+                    <ThemedText style={styles.touchPlate}>{attendance.licensePlate}</ThemedText>
+                    <ThemedText style={styles.touchMeta}>
+                      {attendance.vehicleModel} · {STATUS_LABELS[attendance.status]}
+                    </ThemedText>
+                  </View>
+                  <ThemedText style={styles.touchTime}>{formatTime(Number(attendance.updatedAt))}</ThemedText>
+                </View>
+              ))
+            ) : (
+              <ThemedText style={styles.radarHighlightHelper}>Ainda não há movimentações recentes na fila ativa.</ThemedText>
+            )}
+          </View>
+        </View>
+      </View>
 
       {operationalMetrics ? (
         <View style={[styles.insightsSurface, { backgroundColor: cardBackground, borderColor }]}> 
@@ -95,7 +199,7 @@ export function AdminOverview({ attendances, operationalMetrics, selectedFilter,
           </View>
 
           {operationalMetrics.criticalAttendances.length > 0 ? operationalMetrics.criticalAttendances.slice(0, 4).map((item) => (
-            <View key={item.attendanceId} style={[styles.criticalItem, { borderColor }]}> 
+            <View key={item.attendanceId} style={[styles.criticalItem, { borderColor }]}>
               <View style={styles.criticalItemHeader}>
                 <ThemedText style={styles.criticalItemPlate}>{item.licensePlate}</ThemedText>
                 <View style={[styles.severityBadge, { backgroundColor: item.severity === "critical" ? "rgba(179, 38, 30, 0.12)" : "rgba(181, 71, 8, 0.12)" }]}><ThemedText style={[styles.severityBadgeText, { color: item.severity === "critical" ? "#B3261E" : "#B54708" }]}>{CRITICAL_QUEUE_SEVERITY_LABELS[item.severity]}</ThemedText></View>
@@ -124,7 +228,7 @@ export function AdminOverview({ attendances, operationalMetrics, selectedFilter,
         </View>
       ) : null}
 
-      <View style={[styles.toolbar, { backgroundColor: cardBackground, borderColor }]}>
+      <View style={[styles.toolbar, { backgroundColor: cardBackground, borderColor }]}> 
         <View style={styles.searchBlock}>
           <ThemedText style={styles.searchLabel}>Busca rápida</ThemedText>
           <TextInput style={[styles.searchInput, { borderColor }]} placeholder="Buscar por placa, modelo, cliente ou descrição" placeholderTextColor="#999" value={searchQuery} onChangeText={onSearchChange} />
@@ -159,6 +263,28 @@ const styles = StyleSheet.create({
   recommendedBadgeText: { fontSize: 11, fontWeight: "900" },
   recommendedText: { fontSize: 13, lineHeight: 20, opacity: 0.8, marginBottom: 6 },
   recommendedAction: { fontSize: 13, fontWeight: "800" },
+  radarSurface: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 18 },
+  radarHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 16, flexWrap: "wrap" },
+  radarHeaderTextBlock: { flex: 1, minWidth: 220 },
+  radarTitle: { fontSize: 18, fontWeight: "800", marginBottom: 4 },
+  radarSubtitle: { fontSize: 12, opacity: 0.7, lineHeight: 18 },
+  radarBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  radarBadgeText: { fontSize: 11, fontWeight: "900" },
+  radarGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 14 },
+  radarCard: { flexGrow: 1, minWidth: SCREEN_WIDTH > 768 ? 160 : 140, backgroundColor: "rgba(0,0,0,0.025)", borderRadius: 14, padding: 14 },
+  radarCardTitle: { fontSize: 12, opacity: 0.65, marginBottom: 8, fontWeight: "700" },
+  radarCardValue: { fontSize: 24, fontWeight: "900", marginBottom: 6 },
+  radarCardSubtitle: { fontSize: 12, opacity: 0.68, lineHeight: 18 },
+  radarHighlightsRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  radarHighlightCard: { flex: 1, minWidth: SCREEN_WIDTH > 768 ? 260 : 220, backgroundColor: "rgba(0,0,0,0.025)", borderRadius: 14, padding: 14 },
+  radarHighlightLabel: { fontSize: 12, opacity: 0.65, marginBottom: 8, fontWeight: "700" },
+  radarHighlightValue: { fontSize: 16, fontWeight: "800", marginBottom: 6 },
+  radarHighlightHelper: { fontSize: 12, opacity: 0.72, lineHeight: 18 },
+  touchItem: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.06)" },
+  touchItemTextBlock: { flex: 1 },
+  touchPlate: { fontSize: 13, fontWeight: "800" },
+  touchMeta: { fontSize: 12, opacity: 0.68, marginTop: 2 },
+  touchTime: { fontSize: 12, fontWeight: "700", opacity: 0.7 },
   insightsSurface: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 18 },
   insightsHeaderRow: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 16 },
   insightCard: { flex: 1, minWidth: SCREEN_WIDTH > 768 ? 250 : 220, backgroundColor: "rgba(0,0,0,0.025)", borderRadius: 14, padding: 14 },
