@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { corsMiddleware } from "./cors";
+import { buildHealthSnapshot } from "./health";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -38,8 +39,9 @@ async function startServer() {
 
   registerOAuthRoutes(app);
 
-  app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, timestamp: Date.now() });
+  app.get("/api/health", async (_req, res) => {
+    const snapshot = await buildHealthSnapshot();
+    res.status(snapshot.ok ? 200 : 503).json(snapshot);
   });
 
   app.use(
