@@ -8,6 +8,7 @@ import { trpc } from "@/lib/trpc";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useAttendances } from "@/hooks/use-attendances";
+import { useCompanySettings } from "@/hooks/use-company-settings";
 import { exportAttendancesToCSV, exportProductivityReportToCSV, exportServiceTypeReportToCSV, downloadCSV, generateFilename } from "@/lib/csv-export";
 import { CRITICAL_QUEUE_SEVERITY_LABELS, DELAY_REASON_LABELS, SERVICE_TYPE_LABELS, STATUS_LABELS } from "@/types/attendance";
 
@@ -32,6 +33,7 @@ export default function AnalyticsScreen() {
   const cardBackground = useThemeColor({}, "cardBackground");
   const borderColor = useThemeColor({}, "border");
   const { user, isAdmin, loading: userLoading } = useCurrentUser();
+  const { settings } = useCompanySettings();
   const { attendances, loading } = useAttendances({ scope: "manage", enabled: Boolean(user && isAdmin) });
   const [startDate, setStartDate] = useState<string>(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split("T")[0]);
@@ -57,11 +59,8 @@ export default function AnalyticsScreen() {
     const arrival = filteredAttendances.filter((a) => a.status === "arrival").length;
     const active = activeItems.length;
     const avgCompletedMinutes = getAverage(completedItems.map((a) => getDurationInMinutes(a.createdAt, a.updatedAt)));
-    const tireCount = filteredAttendances.filter((a) => a.serviceType === "tire").length;
-    const correctiveCount = filteredAttendances.filter((a) => a.serviceType === "corrective").length;
-    const preventiveCount = filteredAttendances.filter((a) => a.serviceType === "preventive").length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { total, completed, active, inService, waiting, arrival, avgCompletedMinutes, tireCount, correctiveCount, preventiveCount, completionRate };
+    return { total, completed, active, inService, waiting, arrival, avgCompletedMinutes, completionRate };
   }, [filteredAttendances]);
 
   const metrics: MetricCard[] = useMemo(() => [
@@ -88,6 +87,12 @@ export default function AnalyticsScreen() {
     { title: "Falhas", value: notificationHealth?.failedAttempts ?? 0, subtitle: "Requer atenção operacional", color: (notificationHealth?.failedAttempts ?? 0) > 0 ? "#B3261E" : "#00C853", icon: "⚠️" },
   ], [notificationHealth, tintColor]);
 
+  const configCards: MetricCard[] = useMemo(() => [
+    { title: "Empresa ativa", value: settings.companyName, subtitle: settings.companyPhone || "Sem telefone configurado", color: tintColor, icon: "🏢" },
+    { title: "Atualização Live", value: `${settings.autoRefreshInterval || 3}s`, subtitle: "Intervalo compartilhado com a Live", color: "#0052A3", icon: "🔄" },
+    { title: "Notificações", value: settings.notificationsEnabled ? "Ativas" : "Desligadas", subtitle: settings.soundAlertsEnabled ? "Som habilitado" : "Som desabilitado", color: settings.notificationsEnabled ? "#00C853" : "#B54708", icon: "🔔" },
+  ], [settings, tintColor]);
+
   const handleExportAttendances = async () => { try { await downloadCSV(exportAttendancesToCSV(filteredAttendances), generateFilename("atendimentos_filtrados")); Alert.alert("Sucesso", "Relatório de atendimentos exportado com sucesso!"); } catch { Alert.alert("Erro", "Não foi possível exportar o relatório"); } };
   const handleExportProductivity = async () => { try { await downloadCSV(exportProductivityReportToCSV(filteredAttendances), generateFilename("produtividade_filtrada")); Alert.alert("Sucesso", "Relatório de produtividade exportado com sucesso!"); } catch { Alert.alert("Erro", "Não foi possível exportar o relatório"); } };
   const handleExportServiceType = async () => { try { await downloadCSV(exportServiceTypeReportToCSV(filteredAttendances), generateFilename("servicos_filtrados")); Alert.alert("Sucesso", "Relatório de serviços exportado com sucesso!"); } catch { Alert.alert("Erro", "Não foi possível exportar o relatório"); } };
@@ -99,7 +104,13 @@ export default function AnalyticsScreen() {
   return (
     <ThemedView style={[styles.container, { backgroundColor }]}> 
       <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }]}>
-        <View style={styles.header}><ThemedText type="title">Relatório de Produtividade</ThemedText><ThemedText style={styles.subtitle}>Análise em tempo real do desempenho</ThemedText></View>
+        <View style={styles.header}><ThemedText type="title">Relatório de Produtividade</ThemedText><ThemedText style={styles.subtitle}>Análise em tempo real do desempenho • {settings.companyName}</ThemedText></View>
+
+        <View style={[styles.surface, { backgroundColor: cardBackground }]}>
+          <ThemedText type="subtitle" style={styles.surfaceTitle}>Parâmetros ativos do sistema</ThemedText>
+          <ThemedText style={styles.surfaceSubtitle}>Mesma base usada pela Live e pelas Configurações administrativas.</ThemedText>
+          <View style={styles.notificationGrid}>{configCards.map((metric) => <View key={metric.title} style={styles.notificationCard}><ThemedText style={styles.notificationCardLabel}>{metric.icon} {metric.title}</ThemedText><ThemedText style={[styles.notificationCardValue, { color: metric.color }]} numberOfLines={1}>{metric.value}</ThemedText>{metric.subtitle ? <ThemedText style={styles.notificationCardSubtitle}>{metric.subtitle}</ThemedText> : null}</View>)}</View>
+        </View>
 
         <View style={styles.filterSection}>
           <ThemedText style={styles.filterTitle}>Filtrar por período</ThemedText>
