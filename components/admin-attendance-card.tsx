@@ -65,6 +65,16 @@ export function AdminAttendanceCard({
   const isAssignedToMe = attendance.assignedOperatorId && currentUserId ? attendance.assignedOperatorId === currentUserId : false;
   const hasAssignee = Boolean(attendance.assignedOperatorId);
 
+  const assignmentAlert = !isCompleted
+    ? !hasAssignee && priority.level === "critical"
+      ? { text: "Caso crítico sem responsável definido. Assuma para reduzir risco operacional.", tone: "critical" as const }
+      : !hasAssignee && priority.level === "attention"
+        ? { text: "Atendimento sem responsável e próximo do limite. Vale assumir agora.", tone: "attention" as const }
+        : hasAssignee && !isAssignedToMe && priority.level === "critical"
+          ? { text: "Caso crítico já está com outro responsável. Acompanhe a redistribuição da carga.", tone: "neutral" as const }
+          : null
+    : null;
+
   return (
     <View style={[styles.card, { backgroundColor: cardBackground, borderColor: highlightRecommended ? tintColor : borderColor }]}>
       <View style={[styles.statusIndicator, { backgroundColor: highlightRecommended ? tintColor : statusColor }]} />
@@ -100,6 +110,7 @@ export function AdminAttendanceCard({
           <View style={[styles.slaChip, { backgroundColor: sla.severity === "breached" ? "rgba(179,38,30,0.12)" : sla.severity === "risk" ? "rgba(181,71,8,0.12)" : sla.severity === "exempt" ? "rgba(123,31,162,0.12)" : "rgba(0,200,83,0.12)" }]}>
             <ThemedText style={[styles.slaChipText, { color: sla.severity === "breached" ? "#B3261E" : sla.severity === "risk" ? "#B54708" : sla.severity === "exempt" ? "#7B1FA2" : "#1C7C54" }]}>{SLA_SEVERITY_LABELS[sla.severity]}</ThemedText>
           </View>
+          {!hasAssignee && !isCompleted ? <View style={styles.unassignedChip}><ThemedText style={styles.unassignedChipText}>Sem responsável</ThemedText></View> : null}
           {attendance.customerName ? <View style={styles.customerChip}><ThemedText style={styles.customerChipText}>Cliente: {attendance.customerName}</ThemedText></View> : null}
           {attendance.delayReason !== "none" ? <View style={styles.delayChip}><ThemedText style={styles.delayChipText}>{DELAY_REASON_LABELS[attendance.delayReason]}</ThemedText></View> : null}
           {!canDelete ? <View style={styles.permissionChip}><ThemedText style={styles.permissionChipText}>Exclusão: admin</ThemedText></View> : null}
@@ -117,6 +128,7 @@ export function AdminAttendanceCard({
                 : attendance.assignedOperatorName
               : "Sem responsável definido"}
           </ThemedText>
+          {assignmentAlert ? <View style={[styles.assignmentAlert, assignmentAlert.tone === "critical" ? styles.assignmentAlertCritical : assignmentAlert.tone === "attention" ? styles.assignmentAlertAttention : styles.assignmentAlertNeutral]}><ThemedText style={styles.assignmentAlertText}>{assignmentAlert.text}</ThemedText></View> : null}
           <View style={styles.assignmentActions}>
             {!isCompleted ? (
               hasAssignee && isAssignedToMe ? (
@@ -182,6 +194,8 @@ const styles = StyleSheet.create({
   serviceTypeText: { fontSize: 12, fontWeight: "700", color: "#0066CC" },
   slaChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
   slaChipText: { fontSize: 12, fontWeight: "800" },
+  unassignedChip: { backgroundColor: "rgba(179, 38, 30, 0.12)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  unassignedChipText: { fontSize: 12, fontWeight: "800", color: "#B3261E" },
   customerChip: { backgroundColor: "rgba(0, 0, 0, 0.05)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   customerChipText: { fontSize: 12, fontWeight: "600", opacity: 0.8 },
   delayChip: { backgroundColor: "rgba(255, 165, 0, 0.12)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
@@ -193,6 +207,11 @@ const styles = StyleSheet.create({
   assignmentLabel: { fontSize: 11, fontWeight: "700", opacity: 0.66 },
   assignmentTime: { fontSize: 11, fontWeight: "700", opacity: 0.6 },
   assignmentValue: { fontSize: 13, fontWeight: "800", marginBottom: 8 },
+  assignmentAlert: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8 },
+  assignmentAlertCritical: { backgroundColor: "rgba(179, 38, 30, 0.10)" },
+  assignmentAlertAttention: { backgroundColor: "rgba(181, 71, 8, 0.10)" },
+  assignmentAlertNeutral: { backgroundColor: "rgba(0, 0, 0, 0.05)" },
+  assignmentAlertText: { fontSize: 12, fontWeight: "700", lineHeight: 18 },
   assignmentActions: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
   assignmentButton: { minHeight: 38, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1, justifyContent: "center", alignItems: "center" },
   assignmentButtonText: { fontSize: 12, fontWeight: "800" },

@@ -89,6 +89,16 @@ export default function AdminScreen() {
   const completedAttendances = useMemo(() => filteredAttendances.filter((attendance) => attendance.status === "completed"), [filteredAttendances]);
   const currentOperatorLoad = useMemo(() => dispatchBoard?.operators.find((operator) => operator.userId === String(user?.id)) ?? null, [dispatchBoard?.operators, user?.id]);
   const topOperators = useMemo(() => dispatchBoard?.operators.slice(0, 6) ?? [], [dispatchBoard?.operators]);
+  const unassignedActiveCount = useMemo(() => activeAttendances.filter((attendance) => !attendance.assignedOperatorId).length, [activeAttendances]);
+  const unassignedCriticalCount = useMemo(() => activeAttendances.filter((attendance) => !attendance.assignedOperatorId && getAttendancePrioritySnapshot(attendance).level === "critical").length, [activeAttendances]);
+  const myCriticalLoadCount = useMemo(() => activeAttendances.filter((attendance) => attendance.assignedOperatorId === String(user?.id) && getAttendancePrioritySnapshot(attendance).level === "critical").length, [activeAttendances, user?.id]);
+  const nextActionSummary = unassignedCriticalCount > 0
+    ? `${unassignedCriticalCount} caso(s) crítico(s) estão sem responsável. Priorize assumir antes de avançar a fila.`
+    : unassignedActiveCount > 0
+      ? `${unassignedActiveCount} atendimento(s) seguem sem responsável. Use o quadro de despacho para distribuir melhor a carga.`
+      : myCriticalLoadCount > 0
+        ? `Sua carga possui ${myCriticalLoadCount} caso(s) crítico(s). Revise os cards destacados antes de puxar novos atendimentos.`
+        : "Fila distribuída sem risco imediato de atendimento crítico sem responsável.";
 
   const resetForm = () => {
     setShowNewModal(false);
@@ -135,9 +145,7 @@ export default function AdminScreen() {
 
   const handleUpdateStatus = async (attendance: Attendance) => {
     const nextStatus = getNextStatus(attendance.status);
-    if (!nextStatus) {
-      return Alert.alert("Atendimento concluído", `O atendimento de ${attendance.licensePlate} já está finalizado e continua salvo para histórico e relatórios.`, [{ text: "OK" }]);
-    }
+    if (!nextStatus) return Alert.alert("Atendimento concluído", `O atendimento de ${attendance.licensePlate} já está finalizado e continua salvo para histórico e relatórios.`, [{ text: "OK" }]);
     try {
       await updateAttendanceStatus(Number(attendance.id), nextStatus);
       if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -201,6 +209,15 @@ export default function AdminScreen() {
 
         <AdminOverview attendances={attendances} operationalMetrics={operationalMetrics} selectedFilter={selectedFilter} onFilterChange={setSelectedFilter} searchQuery={searchQuery} onSearchChange={setSearchQuery} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} />
 
+        <View style={[styles.guardSurface, { backgroundColor: cardBackground, borderColor }]}> 
+          <View style={styles.guardHeaderRow}><ThemedText style={styles.guardTitle}>Segurança operacional da fila</ThemedText><ThemedText style={styles.guardSubtitle}>{nextActionSummary}</ThemedText></View>
+          <View style={styles.guardCardsRow}>
+            <View style={[styles.guardCard, styles.guardCardNeutral]}><ThemedText style={styles.guardCardLabel}>Sem responsável</ThemedText><ThemedText style={styles.guardCardValue}>{unassignedActiveCount}</ThemedText><ThemedText style={styles.guardCardHelper}>Ativos sem dono</ThemedText></View>
+            <View style={[styles.guardCard, styles.guardCardCritical]}><ThemedText style={styles.guardCardLabel}>Críticos sem dono</ThemedText><ThemedText style={styles.guardCardValue}>{unassignedCriticalCount}</ThemedText><ThemedText style={styles.guardCardHelper}>Pedem assunção imediata</ThemedText></View>
+            <View style={[styles.guardCard, styles.guardCardAttention]}><ThemedText style={styles.guardCardLabel}>Críticos na minha carga</ThemedText><ThemedText style={styles.guardCardValue}>{myCriticalLoadCount}</ThemedText><ThemedText style={styles.guardCardHelper}>Prioridade da sua operação</ThemedText></View>
+          </View>
+        </View>
+
         {dispatchBoard ? (
           <View style={[styles.dispatchSurface, { backgroundColor: cardBackground, borderColor }]}> 
             <View style={styles.dispatchHeader}><ThemedText style={styles.dispatchTitle}>Despacho operacional</ThemedText><ThemedText style={styles.dispatchSubtitle}>{dispatchBoard.assignedCount} atribuídos · {dispatchBoard.unassignedCount} sem responsável</ThemedText></View>
@@ -257,6 +274,18 @@ const styles = StyleSheet.create({
   feedbackTextBlock: { flex: 1 },
   feedbackTitle: { fontSize: 14, fontWeight: "800", marginBottom: 4 },
   feedbackDetail: { fontSize: 13, opacity: 0.72 },
+  guardSurface: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 18 },
+  guardHeaderRow: { marginBottom: 12 },
+  guardTitle: { fontSize: 16, fontWeight: "900", marginBottom: 6 },
+  guardSubtitle: { fontSize: 13, opacity: 0.76, lineHeight: 20 },
+  guardCardsRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  guardCard: { flex: 1, minWidth: 160, borderRadius: 14, padding: 12 },
+  guardCardNeutral: { backgroundColor: "rgba(0,0,0,0.035)" },
+  guardCardCritical: { backgroundColor: "rgba(179, 38, 30, 0.10)" },
+  guardCardAttention: { backgroundColor: "rgba(181, 71, 8, 0.10)" },
+  guardCardLabel: { fontSize: 12, fontWeight: "700", opacity: 0.72, marginBottom: 6 },
+  guardCardValue: { fontSize: 24, fontWeight: "900", marginBottom: 4 },
+  guardCardHelper: { fontSize: 12, opacity: 0.72 },
   dispatchSurface: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 18 },
   dispatchHeader: { marginBottom: 12 },
   dispatchTitle: { fontSize: 16, fontWeight: "900", marginBottom: 4 },
