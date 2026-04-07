@@ -12,7 +12,7 @@ interface AttendanceGovernanceModalProps {
   borderColor: string;
   tintColor: string;
   onClose: () => void;
-  onSave: (input: { id: number; delayReason: DelayReason; operationalNote?: string; slaExceptionActive: boolean; slaExceptionReason?: string }) => Promise<void>;
+ onSave: (input: { id: string; delayReason: DelayReason; operationalNote?: string; slaExceptionActive: boolean; slaExceptionReason?: string }) => Promise<void>;
 }
 
 export function AttendanceGovernanceModal({ visible, attendance, backgroundColor, cardBackground, borderColor, tintColor, onClose, onSave }: AttendanceGovernanceModalProps) {
@@ -36,7 +36,7 @@ export function AttendanceGovernanceModal({ visible, attendance, backgroundColor
     setSaving(true);
     try {
       await onSave({
-        id: Number(attendance.id),
+       id: attendance.id,
         delayReason,
         operationalNote: operationalNote.trim() || undefined,
         slaExceptionActive,

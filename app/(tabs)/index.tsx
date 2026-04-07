@@ -157,7 +157,7 @@ export default function AdminScreen() {
     }
   };
 
-  const handleUpdateGovernance = async (input: { id: number; delayReason: DelayReason; operationalNote?: string; slaExceptionActive: boolean; slaExceptionReason?: string }) => {
+  const handleUpdateGovernance = async (input: { id: string; delayReason: DelayReason; operationalNote?: string; slaExceptionActive: boolean; slaExceptionReason?: string }) => {
     try {
       await updateAttendanceGovernance(input);
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -176,7 +176,7 @@ export default function AdminScreen() {
     }
 
     try {
-      await updateAttendanceStatus(Number(attendance.id), nextStatus);
+      await updateAttendanceStatus(attendance.id, nextStatus);
       if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setStatusFeedback({ title: `${attendance.licensePlate} avançou`, detail: `${STATUS_LABELS[attendance.status]} → ${STATUS_LABELS[nextStatus]}` });
     } catch {
@@ -186,7 +186,7 @@ export default function AdminScreen() {
 
   const handleDelete = async (id: string) => {
     try {
-      await deleteAttendance(Number(id));
+      await deleteAttendance(id);
       if (selectedHistoryAttendance?.id === id) setSelectedHistoryAttendance(null);
       if (selectedGovernanceAttendance?.id === id) setSelectedGovernanceAttendance(null);
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

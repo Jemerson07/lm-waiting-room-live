@@ -28,14 +28,21 @@ const DB_TO_APP_STATUS: Record<string, AttendanceStatus> = {
 };
 
 function normalizeServiceType(serviceType?: string | null): ServiceType {
-  if (serviceType === "tire" || serviceType === "corrective" || serviceType === "preventive") {
+  if (
+    serviceType === "tire" ||
+    serviceType === "corrective" ||
+    serviceType === "preventive"
+  ) {
     return serviceType;
   }
   return "preventive";
 }
 
-function mapNextDbStatus(currentDbStatus: string, nextStatus: AttendanceStatus): DbStatus {
-  if (nextStatus === "waiting") return currentDbStatus === "checkin" ? "diagnostico" : "diagnostico";
+function mapNextDbStatus(
+  _currentDbStatus: string,
+  nextStatus: AttendanceStatus,
+): DbStatus {
+  if (nextStatus === "waiting") return "diagnostico";
   if (nextStatus === "in_service") return "em_servico";
   if (nextStatus === "completed") return "finalizada";
   return "checkin";
@@ -46,7 +53,11 @@ async function getCurrentAuthUserId() {
   return response.data.user?.id ?? null;
 }
 
-async function findOrCreateCustomer(companyId: string, customerName?: string, customerPhone?: string) {
+async function findOrCreateCustomer(
+  companyId: string,
+  customerName?: string,
+  customerPhone?: string,
+) {
   if (customerPhone?.trim()) {
     const byPhone = await supabase
       .from("customers")
@@ -87,7 +98,12 @@ async function findOrCreateCustomer(companyId: string, customerName?: string, cu
   return created.data;
 }
 
-async function findOrCreateVehicle(companyId: string, customerId: string, licensePlate: string, vehicleModel: string) {
+async function findOrCreateVehicle(
+  companyId: string,
+  customerId: string,
+  licensePlate: string,
+  vehicleModel: string,
+) {
   const existing = await supabase
     .from("vehicles")
     .select("id, customer_id, plate, brand, model")
@@ -118,7 +134,10 @@ export function mapOrderToAttendance(order: any) {
   return {
     id: String(order.id),
     licensePlate: order.vehicle?.plate || "-",
-    vehicleModel: [order.vehicle?.brand, order.vehicle?.model].filter(Boolean).join(" ") || order.vehicle?.model || "VeÃ­culo",
+    vehicleModel:
+      [order.vehicle?.brand, order.vehicle?.model].filter(Boolean).join(" ") ||
+      order.vehicle?.model ||
+      "VeÃ­culo",
     customerName: order.customer?.full_name || undefined,
     customerPhone: order.customer?.phone || undefined,
     status: DB_TO_APP_STATUS[order.current_status] || "arrival",
@@ -144,96 +163,220 @@ export async function getOrders(companyId: string) {
   if (ordersResponse.error) throw ordersResponse.error;
   const orders = ordersResponse.data ?? [];
 
-  const customerIds = [...new Set(orders.map((order) => order.customer_id).filter(Boolean))];
-  const vehicleIds = [...new Set(orders.map((order) => order.vehicle_id).filter(›ÛÛX[ŠJWNÂ‚ˆÛÛœİØİ\İÛY\œÔ™\ÜÛœÙK™ZXÛ\Ô™\ÜÛœÙWHH]ØZ]›ÛZ\ÙK˜[
-Âˆİ\İÛY\’YË›[™İˆÈİ\X˜\ÙK™œ›ÛJ˜İ\İÛY\œÈŠKœÙ[Xİ
-šY[Û˜[YKÛ™K[XZ[ŠKš[ŠšY‹İ\İÛY\’YÊBˆˆ›ÛZ\ÙKœ™\ÛÛ™JÈ]Nˆ×K\œ›Üˆ[H\È[JKˆ™ZXÛRYÈ‹›[™İˆÈİ\X˜\ÙK™œ›ÛJ™ZXÛ\ÈŠKœÙ[Xİ
-šYİ\İÛY\—ÚY]Kœ˜[™[Ù[YX\‹ÛÛÜˆŠKš[ŠšY‹™ZXÛRYÊBˆˆ›ÛZ\ÙKœ™\ÛÛ™JÈ]Nˆ×K\œ›Üˆ[H\È[JKˆJNÂ‚ˆYˆ
-İ\İÛY\œÔ™\ÜÛœÙK™\œ›ÜŠH›İÈİ\İÛY\œÔ™\ÜÛœÙK™\œ›ÜÂˆYˆ
-™ZXÛ\Ô™\ÜÛœÙK™\œ›ÜŠH›İÈ™ZXÛ\Ô™\ÜÛœÙK™\œ›ÜÂ‚ˆÛÛœİİ\İÛY\“X\H™]ÈX\
+  const customerIds = [
+    ...new Set(orders.map((order) => order.customer_id).filter(Boolean)),
+  ];
+  const vehicleIds = [
+    ...new Set(orders.map((order) => order.vehicle_id).filter(Boolean)),
+  ];
 
-İ\İÛY\œÔ™\ÜÛœÙK™]H×JK›X\
+  const [customersResponse, vehiclesResponse] = await Promise.all([
+    customerIds.length
+      ? supabase
+          .from("customers")
+          .select("id, full_name, phone, email")
+          .in("id", customerIds)
+      : Promise.resolve({ data: [], error: null } as any),
+    vehicleIds.length
+      ? supabase
+          .from("vehicles")
+          .select("id, customer_id, plate, brand, model, year, color")
+          .in("id", vehicleIds)
+      : Promise.resolve({ data: [], error: null } as any),
+  ]);
 
-][Nˆ[JHOˆÚ][KšY][WJJNÂˆÛÛœİ™ZXÛSX\H™]ÈX\
+  if (customersResponse.error) throw customersResponse.error;
+  if (vehiclesResponse.error) throw vehiclesResponse.error;
 
-™ZXÛ\Ô™\ÜÛœÙK™]H×JK›X\
+  const customerMap = new Map(
+    (customersResponse.data || []).map((item: any) => [item.id, item]),
+  );
+  const vehicleMap = new Map(
+    (vehiclesResponse.data || []).map((item: any) => [item.id, item]),
+  );
 
-][Nˆ[JHOˆÚ][KšY][WJJNÂ‚ˆ™]\›ˆÜ™\œË›X\
+  return orders.map((order) => ({
+    ...order,
+    customer: customerMap.get(order.customer_id) || null,
+    vehicle: vehicleMap.get(order.vehicle_id) || null,
+  }));
+}
 
-Ü™\ŠHOˆ
-Âˆ‹‹›Ü™\‹ˆİ\İÛY\ˆİ\İÛY\“X\™Ù]
-Ü™\‹˜İ\İÛY\—ÚY
-H[ˆ™ZXÛNˆ™ZXÛSX\™Ù]
-Ü™\‹™ZXÛWÚY
-H[ˆJJNÂŸB‚™^Ü\Ş[˜È[˜İ[ÛˆÜ™X]SÜ™\Š[œ]ˆÂˆXÙ[œÙT]Nˆİš[™ÎÂˆ™ZXÛS[Ù[ˆİš[™ÎÂˆÙ\šXÙU\NˆÙ\šXÙU\NÂˆİ\İÛY\“˜[YOÎˆİš[™ÎÂˆİ\İÛY\”Û™OÎˆİš[™ÎÂˆ\ØÜš\[ÛÎˆİš[™ÎÂŸJHÂˆÛÛœİÛÛ\[HH]ØZ]Ù]Xİ]™PÛÛ\[J
-NÂˆÛÛœİœ˜[˜ÚH]ØZ]Ù]Y˜][œ˜[˜Ú
-ÛÛ\[KšY
-NÂˆÛÛœİÜ\˜]Ü’YH]ØZ]Ù]İ\œ™[]]\Ù\’Y
+export async function createOrder(input: {
+  licensePlate: string;
+  vehicleModel: string;
+  serviceType: ServiceType;
+  customerName?: string;
+  customerPhone?: string;
+  description?: string;
+}) {
+  const company = await getActiveCompany();
+  const branch = await getDefaultBranch(company.id);
+  const operatorId = await getCurrentAuthUserId();
 
-NÂ‚ˆÛÛœİİ\İÛY\ˆH]ØZ]š[™ÜÜ™X]Pİ\İÛY\ŠÛÛ\[KšY[œ]˜İ\İÛY\“˜[YK[œ]˜İ\İÛY\”Û™JNÂˆÛÛœİ™ZXÛHH]ØZ]š[™ÜÜ™X]U™ZXÛJÛÛ\[KšYİ\İÛY\‹šY[œ]›XÙ[œÙT]K[œ]™ZXÛS[Ù[
-NÂ‚ˆÛÛœİÜ™X]YH]ØZ]İ\X˜\ÙBˆ™œ›ÛJ›XZ[[˜[˜ÙWÛÜ™\œÈŠBˆš[œÙ\
-ÂˆÛÛ\[WÚYˆÛÛ\[KšYˆœ˜[˜ÚÚYˆœ˜[˜ÚËšY[ˆİ\İÛY\—ÚYˆ™ZXÛK˜İ\İÛY\—ÚYİ\İÛY\‹šYˆ™ZXÛWÚYˆ™ZXÛKšYˆÜ\˜]Ü—ÚYˆÜ\˜]Ü’Yˆİ\œ™[Üİ]\Îˆ˜ÚXÚÚ[ˆ‹ˆÙ\šXÙWİ\Nˆ[œ]œÙ\šXÙU\Kˆš[Üš]Nˆ››Ü›X[‹ˆÛÛ\Z[ˆ[œ]™\ØÜš\[Ûˆ[ˆJBˆœÙ[Xİ
-ŠˆŠBˆœÚ[™ÛJ
-NÂ‚ˆYˆ
-Ü™X]Y™\œ›ÜŠH›İÈÜ™X]Y™\œ›ÜÂˆ™]\›ˆÜ™X]Y™]NÂŸB‚™^Ü\Ş[˜È[˜İ[Ûˆ\]SÜ™\”İ]\ÊÜ™\’Yˆİš[™Ë™^İ]\Îˆ][™[˜ÙTİ]\ÊHÂˆÛÛœİ^\İ[™ÈH]ØZ]İ\X˜\ÙBˆ™œ›ÛJ›XZ[[˜[˜ÙWÛÜ™\œÈŠBˆœÙ[Xİ
-šYİ\œ™[Üİ]\ÈŠBˆ™\JšY‹Ü™\’Y
-Bˆ›[Z]
-JBˆ›X^X™TÚ[™ÛJ
-NÂ‚ˆYˆ
-^\İ[™Ë™\œ›ÜŠH›İÈ^\İ[™Ë™\œ›ÜÂˆYˆ
-Y^\İ[™Ë™]JH›İÈ™]È\œ›ÜŠ“Ü™[H°èÛÈ[˜ÛÛ˜YHŠNÂ‚ˆÛÛœİ”İ]\ÈHX\™^”İ]\Ê^\İ[™Ë™]K˜İ\œ™[Üİ]\Ë™^İ]\ÊNÂˆÛÛœİ]Úˆ™XÛÜ™İš[™Ë[šÛ›İÛˆHÈİ\œ™[Üİ]\Îˆ”İ]\ÈNÂ‚ˆYˆ
-”İ]\ÈOOH™[WÜÙ\šXÛÈŠH]Úœİ\YØ]H™]È]J
-KÒTÓÔİš[™Ê
-NÂˆYˆ
-”İ]\ÈOOH™š[˜[^˜YHŠH]Ú™š[š\ÚYØ]H™]È]J
-KÒTÓÔİš[™Ê
-NÂˆYˆ
-”İ]\ÈOOH™[™YİYHŠH]Ú™[]™\™YØ]H™]È]J
-KÒTÓÔİš[™Ê
-NÂˆYˆ
-”İ]\ÈOOH˜Ø[˜Ù[YHŠH]Ú˜Ø[˜Ù[YØ]H™]È]J
-KÒTÓÔİš[™Ê
-NÂ‚ˆÛÛœİ\]YH]ØZ]İ\X˜\ÙBˆ™œ›ÛJ›XZ[[˜[˜ÙWÛÜ™\œÈŠBˆ\]J]Ú
-Bˆ™\JšY‹Ü™\’Y
-BˆœÙ[Xİ
-ŠˆŠBˆœÚ[™ÛJ
-NÂ‚ˆYˆ
-\]Y™\œ›ÜŠH›İÈ\]Y™\œ›ÜÂˆ™]\›ˆ\]Y™]NÂŸB‚™^Ü\Ş[˜È[˜İ[Ûˆ\]SÜ™\‘Ûİ™\›˜[˜ÙJ[œ]ˆÂˆYˆİš[™ÎÂˆ[^T™X\ÛÛˆ[^T™X\ÛÛÂˆÜ\˜][Û˜[›İOÎˆİš[™ÎÂˆÛQ^Ù\[ÛXİ]™Nˆ›ÛÛX[ÂˆÛQ^Ù\[Û”™X\ÛÛÎˆİš[™ÎÂŸJHÂˆÛÛœİÛÛ\[HH]ØZ]Ù]Xİ]™PÛÛ\[J
-NÂˆÛÛœİXİÜ•\Ù\’YH]ØZ]Ù]İ\œ™[]]\Ù\’Y
+  const customer = await findOrCreateCustomer(
+    company.id,
+    input.customerName,
+    input.customerPhone,
+  );
+  const vehicle = await findOrCreateVehicle(
+    company.id,
+    customer.id,
+    input.licensePlate,
+    input.vehicleModel,
+  );
 
-NÂ‚ˆÛÛœİ\]YH]ØZ]İ\X˜\ÙBˆ™œ›ÛJ›XZ[[˜[˜ÙWÛÜ™\œÈŠBˆ\]JÂˆ[^WÜ™X\ÛÛˆ[œ]™[^T™X\ÛÛ‹ˆÜ\˜][Û˜[Û›İNˆ[œ]›Ü\˜][Û˜[›İOËš[J
-H[ˆÛWÙ^Ù\[Û—ØXİ]™Nˆ[œ]œÛQ^Ù\[ÛXİ]™KˆÛWÙ^Ù\[Û—Ü™X\ÛÛˆ[œ]œÛQ^Ù\[ÛXİ]™HÈ[œ]œÛQ^Ù\[Û”™X\ÛÛËš[J
-H[ˆ[ˆJBˆ™\JšY‹[œ]šY
-BˆœÙ[Xİ
-ŠˆŠBˆœÚ[™ÛJ
-NÂ‚ˆYˆ
-\]Y™\œ›ÜŠH›İÈ\]Y™\œ›ÜÂ‚ˆ]ØZ]İ\X˜\ÙK™œ›ÛJ›XZ[[˜[˜ÙWÙ]™[ÈŠKš[œÙ\
-ÂˆÛÛ\[WÚYˆÛÛ\[KšYˆÜ™\—ÚYˆ[œ]šYˆXİÜ—İ\Ù\—ÚYˆXİÜ•\Ù\’Yˆ]™[İ\Nˆ™Ûİ™\›˜[˜ÙWİ\]Y‹ˆ]Nˆ‘Ûİ™\›°è›˜ÚXH]X[^˜YH‹ˆ›İNˆÂˆ[œ]™[^T™X\ÛÛˆOOH››Û™HˆÈ[İ]›Îˆ	Ú[œ]™[^T™X\ÛÛŸXˆ[ˆ[œ]›Ü\˜][Û˜[›İOËš[J
-HÈ›İNˆ	Ú[œ]›Ü\˜][Û˜[›İKš[J
-_Xˆ[ˆ[œ]œÛQ^Ù\[ÛXİ]™HÈ^ÙpéğèÛÈÓNˆ	Ú[œ]œÛQ^Ù\[Û”™X\ÛÛËš[J
-H˜]]˜HŸXˆ[ˆBˆ™š[\Š›ÛÛX[ŠBˆš›Ú[Š¸ (ˆ
-KˆX›X×İ×Øİ\İÛY\ˆ˜[ÙKˆJNÂ‚ˆ™]\›ˆ\]Y™]NÂŸB‚™^Ü\Ş[˜È[˜İ[Ûˆ[]SÜ™\ŠÜ™\’Yˆİš[™ÊHÂˆÛÛœİ™[[İ™YH]ØZ]İ\X˜\ÙK™œ›ÛJ›XZ[[˜[˜ÙWÛÜ™\œÈŠK™[]J
-K™\JšY‹Ü™\’Y
-NÂˆYˆ
-™[[İ™Y™\œ›ÜŠH›İÈ™[[İ™Y™\œ›ÜÂŸB‚™^Ü\Ş[˜È[˜İ[ÛˆÙ]Ü™\’\İÜJÜ™\’Yˆİš[™ÊHÂˆÛÛœİ]™[Ô™\ÜÛœÙHH]ØZ]İ\X˜\ÙBˆ™œ›ÛJ›XZ[[˜[˜ÙWÙ]™[ÈŠBˆœÙ[Xİ
-šYXİÜ—İ\Ù\—ÚY]™[İ\K]KÛÜİ]\Ë™]×Üİ]\Ë›İKÜ™X]YØ]ŠBˆ™\J›Ü™\—ÚY‹Ü™\’Y
-Bˆ›Ü™\Š˜Ü™X]YØ]‹È\ØÙ[™[™Îˆ˜[ÙHJNÂ‚ˆYˆ
-]™[Ô™\ÜÛœÙK™\œ›ÜŠH›İÈ]™[Ô™\ÜÛœÙK™\œ›ÜÂˆÛÛœİ]™[ÈH]™[Ô™\ÜÛœÙK™]HÏÈ×NÂˆÛÛœİXİÜ’YÈHË‹‹›™]ÈÙ]
-]™[Ë›X\
+  const created = await supabase
+    .from("maintenance_orders")
+    .insert({
+      company_id: company.id,
+      branch_id: branch?.id || null,
+      customer_id: vehicle.customer_id || customer.id,
+      vehicle_id: vehicle.id,
+      operator_id: operatorId,
+      current_status: "checkin",
+      service_type: input.serviceType,
+      priority: "normal",
+      complaint: input.description || null,
+    })
+    .select("*")
+    .single();
 
-]™[
-HOˆ]™[˜XİÜ—İ\Ù\—ÚY
-K™š[\Š›ÛÛX[ŠJWNÂ‚ˆÛÛœİ›Ùš[\Ô™\ÜÛœÙHHXİÜ’YË›[™İˆÈ]ØZ]İ\X˜\ÙK™œ›ÛJœ›Ùš[\ÈŠKœÙ[Xİ
-šY[Û˜[YHŠKš[ŠšY‹XİÜ’YÊBˆˆ
-È]Nˆ×K\œ›Üˆ[H\È[JNÂ‚ˆYˆ
-›Ùš[\Ô™\ÜÛœÙK™\œ›ÜŠH›İÈ›Ùš[\Ô™\ÜÛœÙK™\œ›ÜÂˆÛÛœİ›Ùš[SX\H™]ÈX\
+  if (created.error) throw created.error;
+  return created.data;
+}
 
-›Ùš[\Ô™\ÜÛœÙK™]H×JK›X\
+export async function updateOrderStatus(
+  orderId: string,
+  nextStatus: AttendanceStatus,
+) {
+  const existing = await supabase
+    .from("maintenance_orders")
+    .select("id, current_status")
+    .eq("id", orderId)
+    .limit(1)
+    .maybeSingle();
 
-›Ùš[Nˆ[JHOˆÜ›Ùš[KšY›Ùš[WJJNÂ‚ˆ™]\›ˆ]™[Ë›X\
+  if (existing.error) throw existing.error;
+  if (!existing.data) throw new Error("Ordem nÃ£o encontrada");
 
-]™[
-HOˆ
-Âˆ‹‹™]™[ˆXİÜ—Û˜[YNˆ]™[˜XİÜ—İ\Ù\—ÚYÈ›Ùš[SX\™Ù]
-]™[˜XİÜ—İ\Ù\—ÚY
-OË™[Û˜[YH[ˆ[ˆJJNÂŸB
+  const dbStatus = mapNextDbStatus(existing.data.current_status, nextStatus);
+  const patch: Record<string, unknown> = { current_status: dbStatus };
+
+  if (dbStatus === "em_servico") patch.started_at = new Date().toISOString();
+  if (dbStatus === "finalizada") patch.finished_at = new Date().toISOString();
+  if (dbStatus === "entregue") patch.delivered_at = new Date().toISOString();
+  if (dbStatus === "cancelada") patch.canceled_at = new Date().toISOString();
+
+  const updated = await supabase
+    .from("maintenance_orders")
+    .update(patch)
+    .eq("id", orderId)
+    .select("*")
+    .single();
+
+  if (updated.error) throw updated.error;
+  return updated.data;
+}
+
+export async function updateOrderGovernance(input: {
+  id: string;
+  delayReason: DelayReason;
+  operationalNote?: string;
+  slaExceptionActive: boolean;
+  slaExceptionReason?: string;
+}) {
+  const company = await getActiveCompany();
+  const actorUserId = await getCurrentAuthUserId();
+
+  const updated = await supabase
+    .from("maintenance_orders")
+    .update({
+      delay_reason: input.delayReason,
+      operational_note: input.operationalNote?.trim() || null,
+      sla_exception_active: input.slaExceptionActive,
+      sla_exception_reason: input.slaExceptionActive
+        ? input.slaExceptionReason?.trim() || null
+        : null,
+    })
+    .eq("id", input.id)
+    .select("*")
+    .single();
+
+  if (updated.error) throw updated.error;
+
+  await supabase.from("maintenance_events").insert({
+    company_id: company.id,
+    order_id: input.id,
+    actor_user_id: actorUserId,
+    event_type: "governance_updated",
+    title: "GovernanÃ§a atualizada",
+    note: [
+      input.delayReason !== "none" ? `Motivo: ${input.delayReason}` : null,
+      input.operationalNote?.trim()
+        ? `Nota: ${input.operationalNote.trim()}`
+        : null,
+      input.slaExceptionActive
+        ? `ExceÃ§Ã£o SLA: ${input.slaExceptionReason?.trim() || "ativa"}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" â€¢ "),
+    public_to_customer: false,
+  });
+
+  return updated.data;
+}
+
+export async function deleteOrder(orderId: string) {
+  const removed = await supabase
+    .from("maintenance_orders")
+    .delete()
+    .eq("id", orderId);
+
+  if (removed.error) throw removed.error;
+}
+
+export async function getOrderHistory(orderId: string) {
+  const eventsResponse = await supabase
+    .from("maintenance_events")
+    .select(
+      "id, order_id, actor_user_id, event_type, title, old_status, new_status, note, created_at",
+    )
+    .eq("order_id", orderId)
+    .order("created_at", { ascending: false });
+
+  if (eventsResponse.error) throw eventsResponse.error;
+  const events = eventsResponse.data ?? [];
+
+  const actorIds = [
+    ...new Set(events.map((event) => event.actor_user_id).filter(Boolean)),
+  ];
+
+type ProfileRow = {
+  id: string;
+  full_name: string | null;
+};
+
+const profilesResponse = actorIds.length
+  ? await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", actorIds)
+  : ({ data: [], error: null } as { data: ProfileRow[]; error: null });
+
+if (profilesResponse.error) throw profilesResponse.error;
+
+const profiles = (profilesResponse.data ?? []) as ProfileRow[];
+
+const profileMap = new Map<string, ProfileRow>(
+  profiles.map((profile) => [profile.id, profile]),
+);
+
+return events.map((event) => ({
+  ...event,
+  actor_name: event.actor_user_id
+    ? profileMap.get(String(event.actor_user_id))?.full_name ?? null
+    : null,
+}));
+}
