@@ -1,5 +1,5 @@
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { trpc } from "@/lib/trpc";
 import {
   ATTENDANCE_HISTORY_ACTOR_LABELS,
   ATTENDANCE_HISTORY_CHANGE_LABELS,
@@ -7,6 +7,7 @@ import {
   type AttendanceHistoryEntry,
 } from "@/types/attendance";
 import { ThemedText } from "@/components/themed-text";
+import { getOrderHistory } from "@/lib/orders";
 
 interface AttendanceHistoryModalProps {
   visible: boolean;
@@ -28,6 +29,44 @@ function formatDateTime(timestamp: number) {
   });
 }
 
+function mapDbStatusToApp(status?: string | null) {
+  const statusMap: Record<string, AttendanceHistoryEntry["toStatus"]> = {
+    checkin: "arrival",
+    diagnostico: "waiting",
+    aprovacao: "waiting",
+    aguardando_peca: "waiting",
+    em_servico: "in_service",
+    teste_final: "in_service",
+    finalizada: "completed",
+    entregue: "completed",
+    cancelada: "completed",
+  };
+
+  return status && statusMap[status] ? statusMap[status] : "arrival";
+}
+
+function mapEventToHistoryEntry(entry: any): AttendanceHistoryEntry {
+  const changeType =
+    entry.event_type === "governance_updated"
+      ? "governance_updated"
+      : entry.old_status || entry.new_status
+        ? "status_changed"
+        : "created";
+
+  return {
+    id: String(entry.id),
+    attendanceId: String(entry.order_id),
+    fromStatus: entry.old_status ? mapDbStatusToApp(entry.old_status) : null,
+    toStatus: mapDbStatusToApp(entry.new_status || entry.old_status),
+    changeType,
+    changedByUserId: entry.actor_user_id ? String(entry.actor_user_id) : undefined,
+    changedByRole: entry.actor_name ? "operator" : "system",
+    changedByName: entry.actor_name ?? undefined,
+    note: entry.note ?? entry.title ?? undefined,
+    createdAt: new Date(entry.created_at).getTime(),
+  };
+}
+
 function getActorLabel(entry: AttendanceHistoryEntry) {
   const baseRole = ATTENDANCE_HISTORY_ACTOR_LABELS[entry.changedByRole] || "Sistema";
   if (entry.changedByName) {
@@ -46,6 +85,9 @@ function getTransitionLabel(entry: AttendanceHistoryEntry) {
   if (entry.changeType === "deleted") {
     return `Atendimento removido quando estava em ${STATUS_LABELS[entry.toStatus]}`;
   }
+  if (entry.changeType === "governance_updated") {
+    return "Governança operacional atualizada";
+  }
   return `${STATUS_LABELS[entry.fromStatus || entry.toStatus]} → ${STATUS_LABELS[entry.toStatus]}`;
 }
 
@@ -56,7 +98,6 @@ function HistoryTimelineItem({ entry, isLast, borderColor, tintColor }: { entry:
         <View style={[styles.timelineDot, { backgroundColor: tintColor }]} />
         {!isLast ? <View style={[styles.timelineLine, { backgroundColor: borderColor }]} /> : null}
       </View>
-
       <View style={[styles.timelineCard, { borderColor }]}> 
         <View style={styles.timelineHeader}>
           <View style={[styles.changeTypeBadge, { backgroundColor: "rgba(0, 82, 163, 0.10)" }]}>
@@ -64,10 +105,8 @@ function HistoryTimelineItem({ entry, isLast, borderColor, tintColor }: { entry:
           </View>
           <ThemedText style={styles.timelineTimestamp}>{formatDateTime(entry.createdAt)}</ThemedText>
         </View>
-
         <ThemedText style={styles.timelineTitle}>{getTransitionLabel(entry)}</ThemedText>
         <ThemedText style={styles.timelineActor}>{getActorLabel(entry)}</ThemedText>
-
         {entry.note ? <ThemedText style={styles.timelineNote}>{entry.note}</ThemedText> : null}
       </View>
     </View>
@@ -84,25 +123,30 @@ export function AttendanceHistoryModal({
   borderColor,
   tintColor,
 }: AttendanceHistoryModalProps) {
-  const numericAttendanceId = attendanceId ? Number(attendanceId) : NaN;
-  const { data, isLoading } = trpc.attendances.history.useQuery(
-    { attendanceId: numericAttendanceId },
-    { enabled: visible && Number.isFinite(numericAttendanceId), retry: false },
-  );
+  const [history, setHistory] = useState<AttendanceHistoryEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const history: AttendanceHistoryEntry[] = (data ?? []).map((entry) => ({
-    id: String(entry.id),
-    attendanceId: String(entry.attendanceId),
-    fromStatus: (entry.fromStatus as AttendanceHistoryEntry["fromStatus"]) ?? null,
-    toStatus: entry.toStatus as AttendanceHistoryEntry["toStatus"],
-    changeType: entry.changeType as AttendanceHistoryEntry["changeType"],
-    changedByUserId: entry.changedByUserId ? String(entry.changedByUserId) : undefined,
-    changedByRole: entry.changedByRole as AttendanceHistoryEntry["changedByRole"],
-    changedByName: entry.changedByName ?? undefined,
-    changedByEmail: entry.changedByEmail ?? undefined,
-    note: entry.note ?? undefined,
-    createdAt: new Date(entry.createdAt).getTime(),
-  }));
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (!visible || !attendanceId) {
+        setHistory([]);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const data = await getOrderHistory(attendanceId);
+        setHistory((data ?? []).map(mapEventToHistoryEntry));
+      } catch (error) {
+        console.error("Erro ao carregar histórico:", error);
+        setHistory([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void loadHistory();
+  }, [attendanceId, visible]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>

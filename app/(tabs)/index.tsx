@@ -10,13 +10,12 @@ import { AttendanceGovernanceModal } from "@/components/attendance-governance-mo
 import { AttendanceHistoryModal } from "@/components/attendance-history-modal";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { trpc } from "@/lib/trpc";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useAttendances } from "@/hooks/use-attendances";
+import { buildOperationalMetrics } from "@/lib/local-operational-metrics";
 import type { Attendance, AttendanceStatus, DelayReason, OperationalPriorityLevel } from "@/types/attendance";
 import {
-  PRIORITY_LEVEL_LABELS,
   STATUS_LABELS,
   SERVICE_TYPE_LABELS,
   getAttendancePrioritySnapshot,
@@ -62,7 +61,8 @@ export default function AdminScreen() {
   const borderColor = useThemeColor({}, "border");
   const { user, roleLabel, isAdmin, isOperator, loading: userLoading } = useCurrentUser();
   const { attendances, loading, createAttendance, updateAttendanceStatus, updateAttendanceGovernance, deleteAttendance } = useAttendances({ scope: "manage", enabled: Boolean(user && isOperator) });
-  const { data: operationalMetrics } = trpc.attendances.metrics.useQuery(undefined, { enabled: Boolean(user && isOperator), retry: false, refetchInterval: 5000 });
+
+  const operationalMetrics = useMemo(() => buildOperationalMetrics(attendances), [attendances]);
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [selectedHistoryAttendance, setSelectedHistoryAttendance] = useState<Attendance | null>(null);
@@ -222,14 +222,9 @@ export default function AdminScreen() {
   }
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor }]}>
+    <ThemedView style={[styles.container, { backgroundColor }]}> 
       <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 80 }]}>
-        <View style={styles.header}>
-          <View style={styles.headerRow}>
-            <View style={styles.headerTextBlock}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Gerencie os atendimentos com fila inteligente em tempo real</ThemedText></View>
-            <View style={[styles.roleBadge, { backgroundColor: isAdmin ? "rgba(0, 200, 83, 0.12)" : "rgba(0, 82, 163, 0.10)" }]}><ThemedText style={[styles.roleBadgeText, { color: isAdmin ? "#1C7C54" : "#0052A3" }]}>{roleLabel}</ThemedText></View>
-          </View>
-        </View>
+        <View style={styles.header}><View style={styles.headerRow}><View style={styles.headerTextBlock}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Gerencie os atendimentos com fila inteligente em tempo real</ThemedText></View><View style={[styles.roleBadge, { backgroundColor: isAdmin ? "rgba(0, 200, 83, 0.12)" : "rgba(0, 82, 163, 0.10)" }]}><ThemedText style={[styles.roleBadgeText, { color: isAdmin ? "#1C7C54" : "#0052A3" }]}>{roleLabel}</ThemedText></View></View></View>
 
         {statusFeedback ? <View style={[styles.feedbackBanner, { backgroundColor: cardBackground, borderColor }]}><View style={[styles.feedbackDot, { backgroundColor: tintColor }]} /><View style={styles.feedbackTextBlock}><ThemedText style={styles.feedbackTitle}>{statusFeedback.title}</ThemedText><ThemedText style={styles.feedbackDetail}>{statusFeedback.detail}</ThemedText></View></View> : null}
 
