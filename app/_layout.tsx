@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -14,13 +14,14 @@ import {
 } from "react-native-safe-area-context";
 import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 
+import { GlobalAccessFeedbackBanner } from "@/components/global-access-feedback-banner";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { handleGlobalAccessError } from "@/lib/access-feedback";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/manus-runtime";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
-// Web iframe previewer cannot infer safe-area; default to zero until container sends metrics.
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -34,7 +35,6 @@ export default function RootLayout() {
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
 
-  // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
   }, []);
@@ -50,20 +50,39 @@ export default function RootLayout() {
     return () => unsubscribe();
   }, [handleSafeAreaUpdate]);
 
-  // Create clients once and reuse them
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            // Disable automatic refetching on window focus for mobile
-            refetchOnWindowFocus: false,
-            // Retry failed requests once
-            retry: 1,
-          },
+  const [queryClient] = useState(() => {
+    let client: QueryClient;
+
+    const onAccessError = async (error: unknown) => {
+      await handleGlobalAccessError(error, {
+        onUnauthorized: async () => {
+          await client.invalidateQueries();
+        },
+      });
+    };
+
+    client = new QueryClient({
+      queryCache: new QueryCache({
+        onError: (error) => {
+          void onAccessError(error);
         },
       }),
-  );
+      mutationCache: new MutationCache({
+        onError: (error) => {
+          void onAccessError(error);
+        },
+      }),
+      defaultOptions: {
+        queries: {
+          refetchOnWindowFocus: false,
+          retry: 1,
+        },
+      },
+    });
+
+    return client;
+  });
+
   const [trpcClient] = useState(() => createTRPCClient());
 
   const providerInitialMetrics = useMemo(
@@ -81,6 +100,7 @@ export default function RootLayout() {
               <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
               <Stack.Screen name="oauth/callback" options={{ headerShown: false }} />
             </Stack>
+            <GlobalAccessFeedbackBanner />
             <StatusBar style="auto" />
           </ThemeProvider>
         </QueryClientProvider>

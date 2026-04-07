@@ -1,33 +1,57 @@
-import {
-  StyleSheet,
-  View,
-  ScrollView,
-  Pressable,
-  TextInput,
-  Alert,
-  Modal,
-  ActivityIndicator,
-  Platform,
-} from "react-native";
+import { StyleSheet, View, ScrollView, Pressable, Alert, ActivityIndicator, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as Haptics from "expo-haptics";
+import { AccessRequiredCard } from "@/components/access-required-card";
+import { AdminAttendanceCard } from "@/components/admin-attendance-card";
+import { AdminCreateAttendanceModal } from "@/components/admin-create-attendance-modal";
+import { AdminOverview } from "@/components/admin-overview";
+import { AttendanceGovernanceModal } from "@/components/attendance-governance-modal";
+import { AttendanceHistoryModal } from "@/components/attendance-history-modal";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useAttendances } from "@/hooks/use-attendances";
-import type { Attendance, AttendanceStatus } from "@/types/attendance";
+import { buildOperationalMetrics } from "@/lib/local-operational-metrics";
+import type { Attendance, AttendanceStatus, DelayReason, OperationalPriorityLevel } from "@/types/attendance";
 import {
   STATUS_LABELS,
   SERVICE_TYPE_LABELS,
-  SERVICE_TYPE_ICONS,
+  getAttendancePrioritySnapshot,
   getNextStatus,
   validateLicensePlate,
   formatLicensePlate,
-  getElapsedTime,
 } from "@/types/attendance";
-import { Colors } from "@/constants/theme";
-import { searchVehicleModels } from "@/lib/vehicle-models";
+
+type StatusFeedback = { title: string; detail: string };
+
+const PRIORITY_ORDER: OperationalPriorityLevel[] = ["critical", "attention", "normal"];
+const PRIORITY_SECTION_META: Record<OperationalPriorityLevel, { title: string; subtitle: string; color: string }> = {
+  critical: {
+    title: "Prioridade máxima",
+    subtitle: "Casos que devem ser tratados primeiro para reduzir risco operacional e SLA estourado.",
+    color: "#B3261E",
+  },
+  attention: {
+    title: "Atenção operacional",
+    subtitle: "Atendimentos que merecem ação coordenada antes que virem caso crítico.",
+    color: "#B54708",
+  },
+  normal: {
+    title: "Fluxo normal",
+    subtitle: "Atendimentos estabilizados, ainda acompanhados pela fila inteligente.",
+    color: "#1C7C54",
+  },
+};
+
+function sortAttendancesByPriority(items: Attendance[]) {
+  return [...items].sort((a, b) => {
+    const priorityDelta = getAttendancePrioritySnapshot(b).score - getAttendancePrioritySnapshot(a).score;
+    if (priorityDelta !== 0) return priorityDelta;
+    return Number(b.updatedAt) - Number(a.updatedAt);
+  });
+}
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();
@@ -35,16 +59,14 @@ export default function AdminScreen() {
   const tintColor = useThemeColor({}, "tint");
   const cardBackground = useThemeColor({}, "cardBackground");
   const borderColor = useThemeColor({}, "border");
+  const { user, roleLabel, isAdmin, isOperator, loading: userLoading } = useCurrentUser();
+  const { attendances, loading, createAttendance, updateAttendanceStatus, updateAttendanceGovernance, deleteAttendance } = useAttendances({ scope: "manage", enabled: Boolean(user && isOperator) });
 
-  const {
-    attendances,
-    loading,
-    createAttendance,
-    updateAttendanceStatus,
-    deleteAttendance,
-  } = useAttendances();
+  const operationalMetrics = useMemo(() => buildOperationalMetrics(attendances), [attendances]);
 
   const [showNewModal, setShowNewModal] = useState(false);
+  const [selectedHistoryAttendance, setSelectedHistoryAttendance] = useState<Attendance | null>(null);
+  const [selectedGovernanceAttendance, setSelectedGovernanceAttendance] = useState<Attendance | null>(null);
   const [licensePlate, setLicensePlate] = useState("");
   const [vehicleModel, setVehicleModel] = useState("");
   const [serviceType, setServiceType] = useState<"tire" | "corrective" | "preventive">("preventive");
@@ -53,34 +75,65 @@ export default function AdminScreen() {
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<AttendanceStatus | "all">("all");
-  const [vehicleModelSuggestions, setVehicleModelSuggestions] = useState<string[]>([]);
-  const [showModelSuggestions, setShowModelSuggestions] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
+
+  useEffect(() => {
+    if (!statusFeedback) return;
+    const timeout = setTimeout(() => setStatusFeedback(null), 2800);
+    return () => clearTimeout(timeout);
+  }, [statusFeedback]);
+
+  const filteredAttendances = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return sortAttendancesByPriority(
+      attendances
+        .filter((a) => selectedFilter === "all" || a.status === selectedFilter)
+        .filter((a) => {
+          if (!q) return true;
+          const haystack = [
+            a.licensePlate,
+            a.vehicleModel,
+            a.customerName || "",
+            a.description || "",
+            a.operationalNote || "",
+            STATUS_LABELS[a.status] || a.status,
+            SERVICE_TYPE_LABELS[a.serviceType] || a.serviceType,
+          ]
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(q);
+        }),
+    );
+  }, [attendances, searchQuery, selectedFilter]);
+
+  const activeAttendances = useMemo(() => filteredAttendances.filter((attendance) => attendance.status !== "completed"), [filteredAttendances]);
+  const recommendedAttendance = activeAttendances[0] ?? null;
+  const recommendedPriority = recommendedAttendance ? getAttendancePrioritySnapshot(recommendedAttendance) : null;
+  const groupedPriorityQueues = useMemo(() => {
+    const groups: Record<OperationalPriorityLevel, Attendance[]> = { critical: [], attention: [], normal: [] };
+    activeAttendances.forEach((attendance) => {
+      groups[getAttendancePrioritySnapshot(attendance).level].push(attendance);
+    });
+    return groups;
+  }, [activeAttendances]);
+  const completedAttendances = useMemo(() => filteredAttendances.filter((attendance) => attendance.status === "completed"), [filteredAttendances]);
+
+  const resetForm = () => {
+    setShowNewModal(false);
+    setLicensePlate("");
+    setVehicleModel("");
+    setServiceType("preventive");
+    setCustomerName("");
+    setCustomerPhone("");
+    setDescription("");
+  };
 
   const handleCreateAttendance = async () => {
-    // Validar placa
-    if (!licensePlate.trim()) {
-      Alert.alert("Erro", "Por favor, informe a placa do veículo");
-      return;
-    }
-
-    if (!validateLicensePlate(licensePlate)) {
-      Alert.alert("Erro", "Formato de placa inválido. Use ABC-1234 ou ABC1D34");
-      return;
-    }
-
-    // Validar modelo
-    if (!vehicleModel.trim()) {
-      Alert.alert("Erro", "Por favor, informe o modelo do veículo");
-      return;
-    }
-
-    // Validar telefone (se fornecido)
-    if (customerPhone.trim() && !/^\d{10,15}$/.test(customerPhone.replace(/\D/g, ""))) {
-      Alert.alert("Erro", "Telefone inválido. Use apenas números (10-15 dígitos)");
-      return;
-    }
-
-    setShowModelSuggestions(false);
+    if (!licensePlate.trim()) return Alert.alert("Erro", "Por favor, informe a placa do veículo");
+    if (!validateLicensePlate(licensePlate)) return Alert.alert("Erro", "Formato de placa inválido. Use ABC-1234 ou ABC1D34");
+    if (!vehicleModel.trim()) return Alert.alert("Erro", "Por favor, informe o modelo do veículo");
+    if (customerPhone.trim() && !/^\d{10,15}$/.test(customerPhone.replace(/\D/g, ""))) return Alert.alert("Erro", "Telefone inválido. Use apenas números (10-15 dígitos)");
 
     try {
       setSubmitting(true);
@@ -92,26 +145,10 @@ export default function AdminScreen() {
         customerPhone: customerPhone.trim() || undefined,
         description: description.trim() || undefined,
       });
-
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      
-      // Mostrar mensagem de sucesso
-      Alert.alert(
-        "Sucesso!",
-        `Atendimento criado para ${formatLicensePlate(licensePlate)}`,
-        [{ text: "OK", onPress: () => {} }]
-      );
-      
-      setShowNewModal(false);
-      setLicensePlate("");
-      setVehicleModel("");
-      setServiceType("preventive");
-      setCustomerName("");
-      setCustomerPhone("");
-      setDescription("");
-      setVehicleModelSuggestions([]);
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setStatusFeedback({ title: "Atendimento criado", detail: `${formatLicensePlate(licensePlate)} entrou no fluxo operacional.` });
+      Alert.alert("Sucesso!", `Atendimento criado para ${formatLicensePlate(licensePlate)}`, [{ text: "OK" }]);
+      resetForm();
     } catch (error) {
       console.error("Erro ao criar atendimento:", error);
       Alert.alert("Erro", "Não foi possível criar o atendimento. Tente novamente.");
@@ -120,30 +157,29 @@ export default function AdminScreen() {
     }
   };
 
+  const handleUpdateGovernance = async (input: { id: number; delayReason: DelayReason; operationalNote?: string; slaExceptionActive: boolean; slaExceptionReason?: string }) => {
+    try {
+      await updateAttendanceGovernance(input);
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setStatusFeedback({ title: "Governança atualizada", detail: "Motivo de atraso, nota operacional ou exceção SLA foram atualizados." });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível salvar a governança.";
+      Alert.alert("Erro", message);
+      throw error;
+    }
+  };
+
   const handleUpdateStatus = async (attendance: Attendance) => {
     const nextStatus = getNextStatus(attendance.status);
     if (!nextStatus) {
-      Alert.alert(
-        "Atendimento Finalizado",
-        `O atendimento de ${attendance.licensePlate} foi concluído. Deseja removê-lo?`,
-        [
-          { text: "Manter", style: "cancel" },
-          {
-            text: "Remover",
-            style: "destructive",
-            onPress: () => handleDelete(attendance.id),
-          },
-        ]
-      );
-      return;
+      return Alert.alert("Atendimento concluído", `O atendimento de ${attendance.licensePlate} já está finalizado e continua salvo para histórico e relatórios.`, [{ text: "OK" }]);
     }
 
     try {
       await updateAttendanceStatus(Number(attendance.id), nextStatus);
-      if (Platform.OS !== "web") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
-    } catch (error) {
+      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setStatusFeedback({ title: `${attendance.licensePlate} avançou`, detail: `${STATUS_LABELS[attendance.status]} → ${STATUS_LABELS[nextStatus]}` });
+    } catch {
       Alert.alert("Erro", "Não foi possível atualizar o status");
     }
   };
@@ -151,672 +187,184 @@ export default function AdminScreen() {
   const handleDelete = async (id: string) => {
     try {
       await deleteAttendance(Number(id));
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-    } catch (error) {
+      if (selectedHistoryAttendance?.id === id) setSelectedHistoryAttendance(null);
+      if (selectedGovernanceAttendance?.id === id) setSelectedGovernanceAttendance(null);
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
       Alert.alert("Erro", "Não foi possível remover o atendimento");
     }
   };
 
-  const filteredAttendances =
-    selectedFilter === "all"
-      ? attendances
-      : attendances.filter((a) => a.status === selectedFilter);
+  if (userLoading) {
+    return <ThemedView style={[styles.container, { backgroundColor }]}><View style={styles.loadingContainer}><ActivityIndicator size="large" color={tintColor} /></View></ThemedView>;
+  }
 
-  const getStatusColor = (status: AttendanceStatus) => {
-    const colorScheme = "light";
-    return Colors[colorScheme][`status${status.charAt(0).toUpperCase() + status.slice(1).replace(/_./g, (m) => m[1].toUpperCase())}` as keyof typeof Colors.light] as string;
-  };
+  if (!user) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor }]}>
+        <ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}>
+          <View style={styles.header}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Área protegida para operação e gestão dos atendimentos</ThemedText></View>
+          <AccessRequiredCard />
+        </ScrollView>
+      </ThemedView>
+    );
+  }
+
+  if (!isOperator) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor }]}>
+        <ScrollView contentContainerStyle={{ paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 20 }}>
+          <View style={styles.header}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Seu perfil atual não possui acesso operacional.</ThemedText></View>
+          <AccessRequiredCard title="Permissão insuficiente" description="Este painel é destinado a operadores e administradores do sistema." />
+        </ScrollView>
+      </ThemedView>
+    );
+  }
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor }]}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop: Math.max(insets.top, 20) + 20,
-            paddingBottom: Math.max(insets.bottom, 20) + 80,
-          },
-        ]}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <ThemedText type="title">Painel Administrativo</ThemedText>
-          <ThemedText style={styles.subtitle}>
-            Gerencie os atendimentos em tempo real
-          </ThemedText>
-        </View>
+    <ThemedView style={[styles.container, { backgroundColor }]}> 
+      <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 80 }]}>
+        <View style={styles.header}><View style={styles.headerRow}><View style={styles.headerTextBlock}><ThemedText type="title">Painel Administrativo</ThemedText><ThemedText style={styles.subtitle}>Gerencie os atendimentos com fila inteligente em tempo real</ThemedText></View><View style={[styles.roleBadge, { backgroundColor: isAdmin ? "rgba(0, 200, 83, 0.12)" : "rgba(0, 82, 163, 0.10)" }]}><ThemedText style={[styles.roleBadgeText, { color: isAdmin ? "#1C7C54" : "#0052A3" }]}>{roleLabel}</ThemedText></View></View></View>
 
-        {/* Filtros */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filters}>
-          <Pressable
-            style={[
-              styles.filterButton,
-              { backgroundColor: cardBackground, borderColor },
-              selectedFilter === "all" && { backgroundColor: tintColor, borderColor: tintColor },
-            ]}
-            onPress={() => setSelectedFilter("all")}
-          >
-            <ThemedText
-              style={[
-                styles.filterText,
-                selectedFilter === "all" && styles.filterTextActive,
-              ]}
-            >
-              Todos ({attendances.length})
-            </ThemedText>
-          </Pressable>
+        {statusFeedback ? <View style={[styles.feedbackBanner, { backgroundColor: cardBackground, borderColor }]}><View style={[styles.feedbackDot, { backgroundColor: tintColor }]} /><View style={styles.feedbackTextBlock}><ThemedText style={styles.feedbackTitle}>{statusFeedback.title}</ThemedText><ThemedText style={styles.feedbackDetail}>{statusFeedback.detail}</ThemedText></View></View> : null}
 
-          {(["arrival", "waiting", "in_service", "completed"] as AttendanceStatus[]).map(
-            (status) => {
-              const count = attendances.filter((a) => a.status === status).length;
-              return (
-                <Pressable
-                  key={status}
-                  style={[
-                    styles.filterButton,
-                    { backgroundColor: cardBackground, borderColor },
-                    selectedFilter === status && { backgroundColor: tintColor, borderColor: tintColor },
-                  ]}
-                  onPress={() => setSelectedFilter(status)}
-                >
-                  <ThemedText
-                    style={[
-                      styles.filterText,
-                      selectedFilter === status && styles.filterTextActive,
-                    ]}
-                  >
-                    {STATUS_LABELS[status]} ({count})
-                  </ThemedText>
-                </Pressable>
-              );
-            }
-          )}
-        </ScrollView>
+        <AdminOverview attendances={attendances} operationalMetrics={operationalMetrics} selectedFilter={selectedFilter} onFilterChange={setSelectedFilter} searchQuery={searchQuery} onSearchChange={setSearchQuery} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} />
 
-        {/* Lista de Atendimentos */}
+        {recommendedAttendance && recommendedPriority ? (
+          <View style={[styles.recommendedSurface, { backgroundColor: cardBackground, borderColor: recommendedPriority.level === "critical" ? "rgba(179,38,30,0.25)" : recommendedPriority.level === "attention" ? "rgba(181,71,8,0.25)" : borderColor }]}>
+            <View style={styles.recommendedHeader}><View style={[styles.recommendedDot, { backgroundColor: recommendedPriority.level === "critical" ? "#B3261E" : recommendedPriority.level === "attention" ? "#B54708" : "#1C7C54" }]} /><ThemedText style={styles.recommendedTitle}>Atender agora</ThemedText></View>
+            <ThemedText style={styles.recommendedPlate}>{recommendedAttendance.licensePlate} · {recommendedAttendance.vehicleModel}</ThemedText>
+            <ThemedText style={styles.recommendedReason}>{recommendedPriority.reason}</ThemedText>
+            <ThemedText style={styles.recommendedAction}>Ação sugerida: {recommendedPriority.actionLabel}</ThemedText>
+          </View>
+        ) : null}
+
+        <View style={styles.listHeader}><ThemedText style={styles.listTitle}>Fila inteligente</ThemedText><ThemedText style={styles.listSubtitle}>{filteredAttendances.length} atendimento(s) encontrado(s){searchQuery.trim() ? " com a busca aplicada" : ""} • agrupados por prioridade operacional</ThemedText></View>
+
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={tintColor} />
-          </View>
+          <View style={styles.loadingContainer}><ActivityIndicator size="large" color={tintColor} /></View>
         ) : filteredAttendances.length === 0 ? (
-          <View style={styles.emptyState}>
-            <ThemedText style={styles.emptyText}>Nenhum atendimento encontrado</ThemedText>
-          </View>
+          <View style={styles.emptyState}><ThemedText style={styles.emptyText}>Nenhum atendimento encontrado com os filtros atuais.</ThemedText></View>
         ) : (
-          filteredAttendances.map((attendance) => (
-            <View key={attendance.id} style={[styles.card, { backgroundColor: cardBackground }]}>
-              <View
-                style={[
-                  styles.statusIndicator,
-                  { backgroundColor: getStatusColor(attendance.status) },
-                ]}
-              />
-
-              <View style={styles.cardContent}>
-                <View style={styles.cardHeader}>
-                  <ThemedText type="subtitle" style={styles.licensePlate}>
-                    {attendance.licensePlate}
-                  </ThemedText>
-                  <ThemedText style={styles.elapsedTime}>
-                    {getElapsedTime(attendance.createdAt)}
-                  </ThemedText>
-                </View>
-
-                <ThemedText style={styles.vehicleModel}>{attendance.vehicleModel}</ThemedText>
-
-                <View style={styles.serviceTypeBadgeAdmin}>
-                  <ThemedText style={styles.serviceTypeTextAdmin}>
-                    {SERVICE_TYPE_ICONS[attendance.serviceType]} {SERVICE_TYPE_LABELS[attendance.serviceType]}
-                  </ThemedText>
-                </View>
-
-                {attendance.customerName && (
-                  <ThemedText style={styles.customerName}>
-                    Cliente: {attendance.customerName}
-                  </ThemedText>
-                )}
-
-                {attendance.description && (
-                  <ThemedText style={styles.description} numberOfLines={2}>
-                    {attendance.description}
-                  </ThemedText>
-                )}
-
-                <View style={styles.cardActions}>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: getStatusColor(attendance.status) },
-                    ]}
-                  >
-                    <ThemedText style={styles.statusBadgeText}>
-                      {STATUS_LABELS[attendance.status]}
-                    </ThemedText>
+          <>
+            {PRIORITY_ORDER.map((priorityLevel) => {
+              const items = groupedPriorityQueues[priorityLevel];
+              if (!items.length) return null;
+              const sectionMeta = PRIORITY_SECTION_META[priorityLevel];
+              return (
+                <View key={priorityLevel} style={styles.prioritySection}>
+                  <View style={styles.prioritySectionHeader}>
+                    <View style={[styles.prioritySectionDot, { backgroundColor: sectionMeta.color }]} />
+                    <View style={styles.prioritySectionTextBlock}>
+                      <ThemedText style={styles.prioritySectionTitle}>{sectionMeta.title}</ThemedText>
+                      <ThemedText style={styles.prioritySectionSubtitle}>{sectionMeta.subtitle}</ThemedText>
+                    </View>
+                    <View style={styles.prioritySectionBadge}><ThemedText style={styles.prioritySectionBadgeText}>{items.length}</ThemedText></View>
                   </View>
-
-                  <View style={styles.actionButtons}>
-                    <Pressable
-                      style={[styles.actionButton, { backgroundColor: tintColor }]}
-                      onPress={() => handleUpdateStatus(attendance)}
-                    >
-                      <ThemedText style={styles.actionButtonText}>
-                        {getNextStatus(attendance.status)
-                          ? `→ ${STATUS_LABELS[getNextStatus(attendance.status)!]}`
-                          : "Finalizado"}
-                      </ThemedText>
-                    </Pressable>
-
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.deleteButton,
-                        {
-                          backgroundColor: pressed ? "rgba(255, 59, 48, 0.1)" : "transparent",
-                          borderColor: "#FF3B30",
-                        },
-                      ]}
-                      onPress={() => {
-                        if (Platform.OS !== "web") {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        }
-                        Alert.alert(
-                          "Remover Atendimento",
-                          `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`,
-                          [
-                            { text: "Manter", style: "cancel" },
-                            {
-                              text: "Remover",
-                              style: "destructive",
-                              onPress: () => handleDelete(attendance.id),
-                            },
-                          ]
-                        );
-                      }}
-                    >
-                      <ThemedText style={[styles.deleteButtonText, { color: "#FF3B30" }]}>
-                        ✗
-                      </ThemedText>
-                    </Pressable>
-                  </View>
+                  {items.map((attendance, index) => (
+                    <AdminAttendanceCard
+                      key={attendance.id}
+                      attendance={attendance}
+                      cardBackground={cardBackground}
+                      borderColor={borderColor}
+                      tintColor={tintColor}
+                      canDelete={isAdmin}
+                      highlightRecommended={recommendedAttendance?.id === attendance.id}
+                      queuePosition={index + 1}
+                      onAdvance={() => handleUpdateStatus(attendance)}
+                      onViewHistory={() => setSelectedHistoryAttendance(attendance)}
+                      onManageGovernance={() => setSelectedGovernanceAttendance(attendance)}
+                      onDelete={isAdmin ? () => {
+                        if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        Alert.alert("Remover Atendimento", `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`, [{ text: "Manter", style: "cancel" }, { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) }]);
+                      } : undefined}
+                    />
+                  ))}
                 </View>
+              );
+            })}
+
+            {completedAttendances.length > 0 ? (
+              <View style={styles.prioritySection}>
+                <View style={styles.prioritySectionHeader}>
+                  <View style={[styles.prioritySectionDot, { backgroundColor: "#1C7C54" }]} />
+                  <View style={styles.prioritySectionTextBlock}>
+                    <ThemedText style={styles.prioritySectionTitle}>Histórico concluído</ThemedText>
+                    <ThemedText style={styles.prioritySectionSubtitle}>Atendimentos finalizados e mantidos para consulta e auditoria.</ThemedText>
+                  </View>
+                  <View style={styles.prioritySectionBadge}><ThemedText style={styles.prioritySectionBadgeText}>{completedAttendances.length}</ThemedText></View>
+                </View>
+                {completedAttendances.map((attendance, index) => (
+                  <AdminAttendanceCard
+                    key={attendance.id}
+                    attendance={attendance}
+                    cardBackground={cardBackground}
+                    borderColor={borderColor}
+                    tintColor={tintColor}
+                    canDelete={isAdmin}
+                    queuePosition={index + 1}
+                    onAdvance={() => handleUpdateStatus(attendance)}
+                    onViewHistory={() => setSelectedHistoryAttendance(attendance)}
+                    onManageGovernance={() => setSelectedGovernanceAttendance(attendance)}
+                    onDelete={isAdmin ? () => {
+                      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      Alert.alert("Remover Atendimento", `Tem certeza que deseja remover o atendimento ${attendance.licensePlate}?`, [{ text: "Manter", style: "cancel" }, { text: "Remover", style: "destructive", onPress: () => handleDelete(attendance.id) }]);
+                    } : undefined}
+                  />
+                ))}
               </View>
-            </View>
-          ))
+            ) : null}
+          </>
         )}
       </ScrollView>
 
-      {/* Botão Flutuante para Adicionar */}
-      <Pressable
-        style={[
-          styles.fab,
-          {
-            backgroundColor: tintColor,
-            bottom: Math.max(insets.bottom, 20) + 60,
-          },
-        ]}
-        onPress={() => setShowNewModal(true)}
-      >
-        <ThemedText style={styles.fabText}>+</ThemedText>
-      </Pressable>
+      <Pressable style={[styles.fab, { backgroundColor: tintColor, bottom: Math.max(insets.bottom, 20) + 60 }]} onPress={() => setShowNewModal(true)}><ThemedText style={styles.fabText}>+</ThemedText></Pressable>
 
-      {/* Modal de Novo Atendimento */}
-      <Modal
-        visible={showNewModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowNewModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContent,
-              {
-                backgroundColor,
-                paddingBottom: Math.max(insets.bottom, 20) + 20,
-              },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <ThemedText type="subtitle">Novo Atendimento</ThemedText>
-              <Pressable onPress={() => setShowNewModal(false)}>
-                <ThemedText style={styles.closeButton}>✕</ThemedText>
-              </Pressable>
-            </View>
+      <AdminCreateAttendanceModal visible={showNewModal} onClose={() => setShowNewModal(false)} onSubmit={handleCreateAttendance} backgroundColor={backgroundColor} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} submitting={submitting} licensePlate={licensePlate} setLicensePlate={setLicensePlate} vehicleModel={vehicleModel} setVehicleModel={setVehicleModel} serviceType={serviceType} setServiceType={setServiceType} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} description={description} setDescription={setDescription} />
 
-            <ScrollView style={styles.modalScroll}>
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Placa do Veículo *</ThemedText>
-                <TextInput
-                  style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
-                  value={licensePlate}
-                  onChangeText={setLicensePlate}
-                  placeholder="ABC-1234 ou ABC1D34"
-                  placeholderTextColor="#999"
-                  autoCapitalize="characters"
-                />
-              </View>
+      <AttendanceHistoryModal visible={Boolean(selectedHistoryAttendance)} attendanceId={selectedHistoryAttendance?.id} licensePlate={selectedHistoryAttendance?.licensePlate} onClose={() => setSelectedHistoryAttendance(null)} backgroundColor={backgroundColor} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} />
 
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Modelo do Veículo *</ThemedText>
-                <TextInput
-                  style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
-                  value={vehicleModel}
-                  onChangeText={(text) => {
-                    setVehicleModel(text);
-                    if (text.trim()) {
-                      setVehicleModelSuggestions(searchVehicleModels(text));
-                      setShowModelSuggestions(true);
-                    } else {
-                      setShowModelSuggestions(false);
-                    }
-                  }}
-                  onFocus={() => {
-                    if (vehicleModel.trim()) {
-                      setShowModelSuggestions(true);
-                    }
-                  }}
-                  placeholder="Ex: VW Nivus Highline"
-                  placeholderTextColor="#999"
-                />
-                {showModelSuggestions && vehicleModelSuggestions.length > 0 && (
-                  <View style={[styles.suggestionsContainer, { backgroundColor: cardBackground, borderColor }]}>
-                    <ScrollView style={styles.suggestionsList} nestedScrollEnabled>
-                      {vehicleModelSuggestions.map((model, index) => (
-                        <Pressable
-                          key={index}
-                          style={styles.suggestionItem}
-                          onPress={() => {
-                            setVehicleModel(model);
-                            setShowModelSuggestions(false);
-                          }}
-                        >
-                          <ThemedText style={styles.suggestionText}>{model}</ThemedText>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Tipo de Serviço *</ThemedText>
-                <View style={styles.serviceTypeContainer}>
-                  <Pressable
-                    style={[
-                      styles.serviceTypeButton,
-                      { backgroundColor: cardBackground, borderColor },
-                      serviceType === "tire" && { backgroundColor: tintColor, borderColor: tintColor },
-                    ]}
-                    onPress={() => setServiceType("tire")}
-                  >
-                    <ThemedText style={[styles.serviceTypeText, serviceType === "tire" && styles.serviceTypeTextActive]}>
-                      🔧 Pneu
-                    </ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.serviceTypeButton,
-                      { backgroundColor: cardBackground, borderColor },
-                      serviceType === "corrective" && { backgroundColor: tintColor, borderColor: tintColor },
-                    ]}
-                    onPress={() => setServiceType("corrective")}
-                  >
-                    <ThemedText style={[styles.serviceTypeText, serviceType === "corrective" && styles.serviceTypeTextActive]}>
-                      ⚠️ Corretiva
-                    </ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.serviceTypeButton,
-                      { backgroundColor: cardBackground, borderColor },
-                      serviceType === "preventive" && { backgroundColor: tintColor, borderColor: tintColor },
-                    ]}
-                    onPress={() => setServiceType("preventive")}
-                  >
-                    <ThemedText style={[styles.serviceTypeText, serviceType === "preventive" && styles.serviceTypeTextActive]}>
-                      ✓ Preventiva
-                    </ThemedText>
-                  </Pressable>
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Nome do Cliente</ThemedText>
-                <TextInput
-                  style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
-                  value={customerName}
-                  onChangeText={setCustomerName}
-                  placeholder="Opcional"
-                  placeholderTextColor="#999"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Telefone do Cliente (WhatsApp)</ThemedText>
-                <TextInput
-                  style={[styles.input, { backgroundColor: cardBackground, borderColor }]}
-                  value={customerPhone}
-                  onChangeText={setCustomerPhone}
-                  placeholder="(11) 99999-9999"
-                  placeholderTextColor="#999"
-                  keyboardType="phone-pad"
-                />
-                <ThemedText style={styles.helperText}>
-                  Deixe em branco para não enviar notificações via WhatsApp
-                </ThemedText>
-              </View>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Descrição</ThemedText>
-                <TextInput
-                  style={[
-                    styles.input,
-                    styles.textArea,
-                    { backgroundColor: cardBackground, borderColor },
-                  ]}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Detalhes do atendimento (opcional)"
-                  placeholderTextColor="#999"
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
-
-              <Pressable
-                style={[
-                  styles.submitButton,
-                  { backgroundColor: tintColor },
-                  submitting && styles.submitButtonDisabled,
-                ]}
-                onPress={handleCreateAttendance}
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <ThemedText style={styles.submitButtonText}>Criar Atendimento</ThemedText>
-                )}
-              </Pressable>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <AttendanceGovernanceModal visible={Boolean(selectedGovernanceAttendance)} attendance={selectedGovernanceAttendance} onClose={() => setSelectedGovernanceAttendance(null)} backgroundColor={backgroundColor} cardBackground={cardBackground} borderColor={borderColor} tintColor={tintColor} onSave={handleUpdateGovernance} />
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-  },
-  header: {
-    marginBottom: 24,
-  },
-  subtitle: {
-    fontSize: 16,
-    opacity: 0.7,
-    marginTop: 8,
-  },
-  filters: {
-    marginBottom: 24,
-    marginHorizontal: -20,
-    paddingHorizontal: 20,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    borderWidth: 1,
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  filterTextActive: {
-    color: "#FFFFFF",
-  },
-  loadingContainer: {
-    paddingVertical: 40,
-    alignItems: "center",
-  },
-  emptyState: {
-    paddingVertical: 60,
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 16,
-    opacity: 0.5,
-  },
-  card: {
-    borderRadius: 12,
-    marginBottom: 16,
-    overflow: "hidden",
-    flexDirection: "row",
-  },
-  statusIndicator: {
-    width: 4,
-  },
-  cardContent: {
-    flex: 1,
-    padding: 16,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  licensePlate: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  elapsedTime: {
-    fontSize: 12,
-    opacity: 0.6,
-  },
-  vehicleModel: {
-    fontSize: 16,
-    marginBottom: 4,
-  },
-  customerName: {
-    fontSize: 14,
-    opacity: 0.8,
-    marginBottom: 4,
-  },
-  description: {
-    fontSize: 14,
-    opacity: 0.7,
-    marginBottom: 12,
-  },
-  cardActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 8,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  actionButtons: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  actionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minHeight: 36,
-    justifyContent: "center",
-  },
-  actionButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  deleteButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  deleteButtonText: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  fab: {
-    position: "absolute",
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  fabText: {
-    color: "#FFFFFF",
-    fontSize: 32,
-    fontWeight: "300",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "90%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E1E4E8",
-  },
-  closeButton: {
-    fontSize: 24,
-    opacity: 0.6,
-  },
-  modalScroll: {
-    padding: 20,
-  },
-  formGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  helperText: {
-    fontSize: 12,
-    opacity: 0.6,
-    marginTop: 6,
-  },
-  textArea: {
-    minHeight: 100,
-    textAlignVertical: "top",
-  },
-  submitButton: {
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  serviceTypeContainer: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  serviceTypeButton: {
-    flex: 1,
-    minWidth: 100,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  serviceTypeText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  serviceTypeTextActive: {
-    color: "#FFFFFF",
-  },
-  serviceTypeBadgeAdmin: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(0, 102, 204, 0.1)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginTop: 6,
-    marginBottom: 4,
-  },
-  serviceTypeTextAdmin: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#0066CC",
-  },
-  suggestionsContainer: {
-    borderWidth: 1,
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
-    maxHeight: 200,
-    marginTop: -8,
-    marginHorizontal: -1,
-  },
-  suggestionsList: {
-    maxHeight: 200,
-  },
-  suggestionItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 0, 0, 0.05)",
-  },
-  suggestionText: {
-    fontSize: 14,
-  },
+  container: { flex: 1 },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20 },
+  header: { marginBottom: 20, paddingHorizontal: 20 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
+  headerTextBlock: { flex: 1 },
+  subtitle: { fontSize: 16, opacity: 0.7, marginTop: 8 },
+  roleBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, marginTop: 4 },
+  roleBadgeText: { fontSize: 12, fontWeight: "800" },
+  feedbackBanner: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 14, marginBottom: 16, flexDirection: "row", alignItems: "center", gap: 12 },
+  feedbackDot: { width: 12, height: 12, borderRadius: 6 },
+  feedbackTextBlock: { flex: 1 },
+  feedbackTitle: { fontSize: 14, fontWeight: "800", marginBottom: 4 },
+  feedbackDetail: { fontSize: 13, opacity: 0.72 },
+  recommendedSurface: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 18 },
+  recommendedHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
+  recommendedDot: { width: 12, height: 12, borderRadius: 6 },
+  recommendedTitle: { fontSize: 16, fontWeight: "900" },
+  recommendedPlate: { fontSize: 22, fontWeight: "900", marginBottom: 6 },
+  recommendedReason: { fontSize: 13, lineHeight: 20, opacity: 0.8, marginBottom: 6 },
+  recommendedAction: { fontSize: 13, fontWeight: "800" },
+  listHeader: { marginBottom: 14 },
+  listTitle: { fontSize: 18, fontWeight: "700" },
+  listSubtitle: { fontSize: 13, opacity: 0.65, marginTop: 4 },
+  prioritySection: { marginBottom: 18 },
+  prioritySectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  prioritySectionDot: { width: 12, height: 12, borderRadius: 6 },
+  prioritySectionTextBlock: { flex: 1 },
+  prioritySectionTitle: { fontSize: 16, fontWeight: "800" },
+  prioritySectionSubtitle: { fontSize: 12, opacity: 0.72, marginTop: 3, lineHeight: 18 },
+  prioritySectionBadge: { minWidth: 34, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(0,0,0,0.06)", alignItems: "center" },
+  prioritySectionBadgeText: { fontSize: 12, fontWeight: "800" },
+  loadingContainer: { paddingVertical: 40, alignItems: "center" },
+  emptyState: { paddingVertical: 60, alignItems: "center" },
+  emptyText: { fontSize: 16, opacity: 0.55, textAlign: "center" },
+  fab: { position: "absolute", right: 20, width: 56, height: 56, borderRadius: 28, justifyContent: "center", alignItems: "center", elevation: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+  fabText: { color: "#FFFFFF", fontSize: 32, fontWeight: "300" },
 });

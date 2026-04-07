@@ -7,4 +7,6 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  corsAllowedOrigins: process.env.CORS_ALLOWED_ORIGINS ?? "",
+  corsAllowAllInDev: process.env.CORS_ALLOW_ALL_IN_DEV !== "false",
 };

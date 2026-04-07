@@ -1,37 +1,51 @@
-import { useCallback } from "react";
-import { trpc } from "@/lib/trpc";
-import type { AttendanceStatus } from "@/types/attendance";
+import { useCallback, useEffect, useState } from "react";
+import type { AttendanceStatus, DelayReason } from "@/types/attendance";
+import { getActiveCompany } from "@/lib/company";
+import {
+  createOrder,
+  deleteOrder,
+  getOrders,
+  mapOrderToAttendance,
+  updateOrderGovernance,
+  updateOrderStatus,
+} from "@/lib/orders";
 
-export function useAttendances() {
-  const utils = trpc.useUtils();
+type AttendanceScope = "manage" | "live";
 
-  // Query para listar atendimentos
-  const { data: attendances = [], isLoading: loading } = trpc.attendances.list.useQuery(undefined, {
-    refetchInterval: 3000, // Atualizar a cada 3 segundos
-  });
+interface UseAttendancesOptions {
+  scope?: AttendanceScope;
+  enabled?: boolean;
+}
 
-  // Mutation para criar atendimento
-  const createMutation = trpc.attendances.create.useMutation({
-    onSuccess: () => {
-      utils.attendances.list.invalidate();
-    },
-  });
+export function useAttendances(options: UseAttendancesOptions = {}) {
+  const { enabled = true } = options;
+  const [attendances, setAttendances] = useState<any[]>([]);
+  const [loading, setLoading] = useState(enabled);
 
-  // Mutation para atualizar status
-  const updateStatusMutation = trpc.attendances.updateStatus.useMutation({
-    onSuccess: () => {
-      utils.attendances.list.invalidate();
-    },
-  });
+  const loadAttendances = useCallback(async () => {
+    if (!enabled) {
+      setAttendances([]);
+      setLoading(false);
+      return;
+    }
 
-  // Mutation para deletar atendimento
-  const deleteMutation = trpc.attendances.delete.useMutation({
-    onSuccess: () => {
-      utils.attendances.list.invalidate();
-    },
-  });
+    setLoading(true);
+    try {
+      const company = await getActiveCompany();
+      const orders = await getOrders(company.id);
+      setAttendances(orders.map(mapOrderToAttendance));
+    } catch (error) {
+      console.error("Erro ao carregar atendimentos:", error);
+      setAttendances([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [enabled]);
 
-  // Função para criar atendimento
+  useEffect(() => {
+    void loadAttendances();
+  }, [loadAttendances]);
+
   const createAttendance = useCallback(
     async (data: {
       licensePlate: string;
@@ -41,52 +55,26 @@ export function useAttendances() {
       customerPhone?: string;
       description?: string;
     }) => {
-      await createMutation.mutateAsync(data);
+      await createOrder(data);
+      await loadAttendances();
     },
-    [createMutation]
+    [loadAttendances],
   );
 
-  // Função para atualizar status
   const updateAttendanceStatus = useCallback(
     async (id: number, status: AttendanceStatus) => {
-      await updateStatusMutation.mutateAsync({ id, status });
+      await updateOrderStatus(String(id), status);
+      await loadAttendances();
     },
-    [updateStatusMutation]
+    [loadAttendances],
   );
 
-  // Função para deletar atendimento
-  const deleteAttendance = useCallback(
-    async (id: number) => {
-      await deleteMutation.mutateAsync({ id });
-    },
-    [deleteMutation]
-  );
-
-  // Função para forçar reload
-  const reload = useCallback(() => {
-    utils.attendances.list.invalidate();
-  }, [utils]);
-
-  // Converter timestamps do banco para formato do tipo Attendance
-  const formattedAttendances = attendances.map((att) => ({
-    id: String(att.id),
-    licensePlate: att.licensePlate,
-    vehicleModel: att.vehicleModel,
-    customerName: att.customerName ?? undefined,
-    customerPhone: att.customerPhone ?? undefined,
-    status: att.status as AttendanceStatus,
-    serviceType: att.serviceType as "tire" | "corrective" | "preventive",
-    description: att.description ?? undefined,
-    createdAt: new Date(att.createdAt).getTime(),
-    updatedAt: new Date(att.updatedAt).getTime(),
-  }));
-
-  return {
-    attendances: formattedAttendances,
-    loading,
-    createAttendance,
-    updateAttendanceStatus,
-    deleteAttendance,
-    reload,
-  };
-}
+  const updateAttendanceGovernance = useCallback(
+    async (data: {
+      id: number;
+      delayReason: DelayReason;
+      operationalNote?: string;
+      slaExceptionActive: boolean;
+      slaExceptionReason?: string;
+    }) => {
+      await updateOrderGovernance({\n        id: String(data.id),\n        delayReason: data.delayReason,\n        operationalNote: data.operationalNote,\n        slaExceptionActive: data.slaExceptionActive,\n        slaExceptionReason: data.slaExceptionReason,\n      });\n      await loadAttendances();\n    },\n    [loadAttendances],\n  );\n\n  const deleteAttendance = useCallback(\n    async (id: number) => {\n      await deleteOrder(String(id));\n      await loadAttendances();\n    },\n    [loadAttendances],\n  );\n\n  return {\n    attendances,\n    loading,\n    createAttendance,\n    updateAttendanceStatus,\n    updateAttendanceGovernance,\n    deleteAttendance,\n    reload: loadAttendances,\n  };\n}
