@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-export const SETTINGS_KEY = "company_settings";
+import { getActiveCompany, getCompanySettings } from "@/lib/company";
+import { supabase } from "@/lib/supabase";
 
 export interface CompanySettings {
   companyName: string;
@@ -40,13 +39,21 @@ export function useCompanySettings() {
   const [loading, setLoading] = useState(true);
 
   const loadSettings = useCallback(async () => {
+    setLoading(true);
     try {
-      const stored = await AsyncStorage.getItem(SETTINGS_KEY);
-      if (stored) {
-        setSettings(normalizeCompanySettings(JSON.parse(stored)));
-      } else {
-        setSettings(DEFAULT_SETTINGS);
-      }
+      const company = await getActiveCompany();
+      const stored = await getCompanySettings(company.id);
+      setSettings(
+        normalizeCompanySettings({
+          companyName: company.name,
+          companyEmail: stored?.company_email || "",
+          companyPhone: stored?.company_phone || stored?.whatsapp || "",
+          companyAddress: stored?.company_address || "",
+          soundAlertsEnabled: stored?.sound_alerts_enabled !== false,
+          notificationsEnabled: stored?.notifications_enabled !== false,
+          autoRefreshInterval: stored?.auto_refresh_interval || 3,
+        }),
+      );
     } catch (error) {
       console.error("Erro ao carregar configurações:", error);
       setSettings(DEFAULT_SETTINGS);
@@ -56,19 +63,34 @@ export function useCompanySettings() {
   }, []);
 
   useEffect(() => {
-    loadSettings();
+    void loadSettings();
   }, [loadSettings]);
 
   const saveSettings = async (newSettings: CompanySettings) => {
     const normalized = normalizeCompanySettings(newSettings);
-    try {
-      await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(normalized));
-      setSettings(normalized);
-      return normalized;
-    } catch (error) {
-      console.error("Erro ao salvar configurações:", error);
-      throw error;
-    }
+    const company = await getActiveCompany();
+
+    const [companyResponse, settingsResponse] = await Promise.all([
+      supabase.from("companies").update({ name: normalized.companyName }).eq("id", company.id),
+      supabase.from("company_settings").upsert(
+        {
+          company_id: company.id,
+          company_email: normalized.companyEmail,
+          company_phone: normalized.companyPhone,
+          company_address: normalized.companyAddress,
+          sound_alerts_enabled: normalized.soundAlertsEnabled,
+          notifications_enabled: normalized.notificationsEnabled,
+          auto_refresh_interval: normalized.autoRefreshInterval,
+        },
+        { onConflict: "company_id" },
+      ),
+    ]);
+
+    if (companyResponse.error) throw companyResponse.error;
+    if (settingsResponse.error) throw settingsResponse.error;
+
+    setSettings(normalized);
+    return normalized;
   };
 
   const resetSettings = async () => saveSettings(DEFAULT_SETTINGS);

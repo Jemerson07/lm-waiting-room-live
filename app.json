@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "LM Sala de Espera Live",
+    "slug": "lm-sala-espera-live",
+    "scheme": "lmsalaespera",
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    }
+  }
+}

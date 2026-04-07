@@ -1,6 +1,14 @@
-import { useCallback } from "react";
-import { trpc } from "@/lib/trpc";
+import { useCallback, useEffect, useState } from "react";
 import type { AttendanceStatus, DelayReason } from "@/types/attendance";
+import { getActiveCompany } from "@/lib/company";
+import {
+  createOrder,
+  deleteOrder,
+  getOrders,
+  mapOrderToAttendance,
+  updateOrderGovernance,
+  updateOrderStatus,
+} from "@/lib/orders";
 
 type AttendanceScope = "manage" | "live";
 
@@ -10,88 +18,63 @@ interface UseAttendancesOptions {
 }
 
 export function useAttendances(options: UseAttendancesOptions = {}) {
-  const { scope = "manage", enabled = true } = options;
-  const utils = trpc.useUtils();
+  const { enabled = true } = options;
+  const [attendances, setAttendances] = useState<any[]>([]);
+  const [loading, setLoading] = useState(enabled);
 
-  const liveQuery = trpc.attendances.liveList.useQuery(undefined, {
-    enabled: enabled && scope === "live",
-    refetchInterval: scope === "live" ? 3000 : false,
-  });
-
-  const manageQuery = trpc.attendances.manageList.useQuery(undefined, {
-    enabled: enabled && scope === "manage",
-    refetchInterval: scope === "manage" ? 3000 : false,
-    retry: false,
-  });
-
-  const query = scope === "live" ? liveQuery : manageQuery;
-  const attendances = query.data ?? [];
-  const loading = enabled ? query.isLoading : false;
-
-  const invalidateAttendanceQueries = useCallback(() => {
-    utils.attendances.manageList.invalidate();
-    utils.attendances.liveList.invalidate();
-    utils.attendances.history.invalidate();
-    utils.attendances.metrics.invalidate();
-    utils.attendances.notificationHealth.invalidate();
-    utils.attendances.notificationLogs.invalidate();
-  }, [utils]);
-
-  const createMutation = trpc.attendances.create.useMutation({ onSuccess: invalidateAttendanceQueries });
-  const updateStatusMutation = trpc.attendances.updateStatus.useMutation({ onSuccess: invalidateAttendanceQueries });
-  const deleteMutation = trpc.attendances.delete.useMutation({ onSuccess: invalidateAttendanceQueries });
-  const updateGovernanceMutation = trpc.attendances.updateGovernance.useMutation({ onSuccess: invalidateAttendanceQueries });
-
-  const createAttendance = useCallback(async (data: { licensePlate: string; vehicleModel: string; serviceType: "tire" | "corrective" | "preventive"; customerName?: string; customerPhone?: string; description?: string; }) => {
-    await createMutation.mutateAsync(data);
-  }, [createMutation]);
-
-  const updateAttendanceStatus = useCallback(async (id: number, status: AttendanceStatus) => {
-    await updateStatusMutation.mutateAsync({ id, status });
-  }, [updateStatusMutation]);
-
-  const updateAttendanceGovernance = useCallback(async (data: { id: number; delayReason: DelayReason; operationalNote?: string; slaExceptionActive: boolean; slaExceptionReason?: string; }) => {
-    await updateGovernanceMutation.mutateAsync(data);
-  }, [updateGovernanceMutation]);
-
-  const deleteAttendance = useCallback(async (id: number) => {
-    await deleteMutation.mutateAsync({ id });
-  }, [deleteMutation]);
-
-  const reload = useCallback(() => {
-    if (scope === "live") {
-      utils.attendances.liveList.invalidate();
+  const loadAttendances = useCallback(async () => {
+    if (!enabled) {
+      setAttendances([]);
+      setLoading(false);
       return;
     }
-    utils.attendances.manageList.invalidate();
-    utils.attendances.metrics.invalidate();
-    utils.attendances.notificationHealth.invalidate();
-  }, [scope, utils]);
 
-  const formattedAttendances = attendances.map((att) => ({
-    id: String(att.id),
-    licensePlate: att.licensePlate,
-    vehicleModel: att.vehicleModel,
-    customerName: att.customerName ?? undefined,
-    customerPhone: "customerPhone" in att ? att.customerPhone ?? undefined : undefined,
-    status: att.status as AttendanceStatus,
-    serviceType: att.serviceType as "tire" | "corrective" | "preventive",
-    description: "description" in att ? att.description ?? undefined : undefined,
-    delayReason: "delayReason" in att ? (att.delayReason as DelayReason) : "none",
-    operationalNote: "operationalNote" in att ? att.operationalNote ?? undefined : undefined,
-    slaExceptionActive: "slaExceptionActive" in att ? Boolean(att.slaExceptionActive) : false,
-    slaExceptionReason: "slaExceptionReason" in att ? att.slaExceptionReason ?? undefined : undefined,
-    createdAt: new Date(att.createdAt).getTime(),
-    updatedAt: new Date(att.updatedAt).getTime(),
-  }));
+    setLoading(true);
+    try {
+      const company = await getActiveCompany();
+      const orders = await getOrders(company.id);
+      setAttendances(orders.map(mapOrderToAttendance));
+    } catch (error) {
+      console.error("Erro ao carregar atendimentos:", error);
+      setAttendances([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [enabled]);
 
-  return {
-    attendances: formattedAttendances,
-    loading,
-    createAttendance,
-    updateAttendanceStatus,
-    updateAttendanceGovernance,
-    deleteAttendance,
-    reload,
-  };
-}
+  useEffect(() => {
+    void loadAttendances();
+  }, [loadAttendances]);
+
+  const createAttendance = useCallback(
+    async (data: {
+      licensePlate: string;
+      vehicleModel: string;
+      serviceType: "tire" | "corrective" | "preventive";
+      customerName?: string;
+      customerPhone?: string;
+      description?: string;
+    }) => {
+      await createOrder(data);
+      await loadAttendances();
+    },
+    [loadAttendances],
+  );
+
+  const updateAttendanceStatus = useCallback(
+    async (id: number, status: AttendanceStatus) => {
+      await updateOrderStatus(String(id), status);
+      await loadAttendances();
+    },
+    [loadAttendances],
+  );
+
+  const updateAttendanceGovernance = useCallback(
+    async (data: {
+      id: number;
+      delayReason: DelayReason;
+      operationalNote?: string;
+      slaExceptionActive: boolean;
+      slaExceptionReason?: string;
+    }) => {
+      await updateOrderGovernance({\n        id: String(data.id),\n        delayReason: data.delayReason,\n        operationalNote: data.operationalNote,\n        slaExceptionActive: data.slaExceptionActive,\n        slaExceptionReason: data.slaExceptionReason,\n      });\n      await loadAttendances();\n    },\n    [loadAttendances],\n  );\n\n  const deleteAttendance = useCallback(\n    async (id: number) => {\n      await deleteOrder(String(id));\n      await loadAttendances();\n    },\n    [loadAttendances],\n  );\n\n  return {\n    attendances,\n    loading,\n    createAttendance,\n    updateAttendanceStatus,\n    updateAttendanceGovernance,\n    deleteAttendance,\n    reload: loadAttendances,\n  };\n}
