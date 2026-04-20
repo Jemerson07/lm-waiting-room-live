@@ -83,7 +83,7 @@ export default function TVModeScreen() {
         <View style={[styles.header, isLandscape && styles.headerLandscape]}>
           <View style={styles.logoContainer}>
             <Image
-              source={require("@/assets/images/logo-lm.png")}
+              source={require("@/assets/images/logo-jemerson-santos.png")}
               style={[styles.logo, isLandscape && styles.logoLandscape]}
               contentFit="contain"
             />
