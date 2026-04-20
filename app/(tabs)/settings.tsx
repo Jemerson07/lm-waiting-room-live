@@ -155,7 +155,7 @@ export default function SettingsScreen() {
 
         <View style={[styles.section, { backgroundColor: cardBackground }]}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>ℹ️ Sobre</ThemedText>
-          <View style={styles.aboutContainer}><Image source={require("@/assets/images/logo-lm.png")} style={styles.logoAbout} contentFit="contain" /><ThemedText style={styles.appVersion}>JS Sala de Espera Live v1.0.0</ThemedText><ThemedText style={styles.appDescription}>Sistema de gerenciamento de sala de espera veicular com sincronização em tempo real</ThemedText></View>
+          <View style={styles.aboutContainer}><Image source={require("@/assets/images/logo-jemerson-santos.png")} style={styles.logoAbout} contentFit="contain" /><ThemedText style={styles.appVersion}>JS Sala de Espera Live v1.0.0</ThemedText><ThemedText style={styles.appDescription}>Sistema de gerenciamento de sala de espera veicular com sincronização em tempo real</ThemedText></View>
         </View>
 
         <View style={styles.actionButtons}>
