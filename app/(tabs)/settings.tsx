@@ -10,6 +10,7 @@ import { ThemedView } from "@/components/themed-view";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useCompanySettings } from "@/hooks/use-company-settings";
+import { BRAND_NAME, BRAND_SUBTITLE, BRAND_SYSTEM_DESCRIPTION } from "@/lib/brand";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -79,7 +80,7 @@ export default function SettingsScreen() {
         text: "Restaurar",
         style: "destructive",
         onPress: () => {
-          setCompanyName("LM Soluções de Mobilidade");
+          setCompanyName("Jemerson Santos");
           setCompanyEmail("");
           setCompanyPhone("");
           setCompanyAddress("");
@@ -132,9 +133,9 @@ export default function SettingsScreen() {
 
         <View style={[styles.section, { backgroundColor: cardBackground }]}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>📋 Informações da Empresa</ThemedText>
-          <View style={styles.formGroup}><ThemedText style={styles.label}>Nome da Empresa *</ThemedText><TextInput style={[styles.input, { backgroundColor, borderColor }]} value={companyName} onChangeText={(text) => { setCompanyName(text); setHasChanges(true); }} placeholder="Ex: LM Soluções de Mobilidade" placeholderTextColor="#999" /></View>
+          <View style={styles.formGroup}><ThemedText style={styles.label}>Nome da Empresa *</ThemedText><TextInput style={[styles.input, { backgroundColor, borderColor }]} value={companyName} onChangeText={(text) => { setCompanyName(text); setHasChanges(true); }} placeholder="Ex: Jemerson Santos" placeholderTextColor="#999" /></View>
           <View style={styles.formGroup}><ThemedText style={styles.label}>Email</ThemedText><TextInput style={[styles.input, { backgroundColor, borderColor }]} value={companyEmail} onChangeText={(text) => { setCompanyEmail(text); setHasChanges(true); }} placeholder="contato@empresa.com" placeholderTextColor="#999" keyboardType="email-address" /></View>
-          <View style={styles.formGroup}><ThemedText style={styles.label}>Telefone</ThemedText><TextInput style={[styles.input, { backgroundColor, borderColor }]} value={companyPhone} onChangeText={(text) => { setCompanyPhone(text); setHasChanges(true); }} placeholder="(11) 99999-9999" placeholderTextColor="#999" keyboardType="phone-pad" /></View>
+          <View style={styles.formGroup}><ThemedText style={styles.label}>Telefone</ThemedText><TextInput style={[styles.input, { backgroundColor, borderColor }]} value={companyPhone} onChangeText={(text) => { setCompanyPhone(text); setHasChanges(true); }} placeholder="(71) 99159-5758" placeholderTextColor="#999" keyboardType="phone-pad" /></View>
           <View style={styles.formGroup}><ThemedText style={styles.label}>Endereço</ThemedText><TextInput style={[styles.input, { backgroundColor, borderColor }]} value={companyAddress} onChangeText={(text) => { setCompanyAddress(text); setHasChanges(true); }} placeholder="Rua, número, bairro, cidade" placeholderTextColor="#999" /></View>
         </View>
 
@@ -154,7 +155,7 @@ export default function SettingsScreen() {
 
         <View style={[styles.section, { backgroundColor: cardBackground }]}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>ℹ️ Sobre</ThemedText>
-          <View style={styles.aboutContainer}><Image source={require("@/assets/images/logo-lm.png")} style={styles.logoAbout} contentFit="contain" /><ThemedText style={styles.appVersion}>LM Sala de Espera Live v1.0.0</ThemedText><ThemedText style={styles.appDescription}>Sistema de gerenciamento de sala de espera veicular com sincronização em tempo real</ThemedText></View>
+          <View style={styles.aboutContainer}><Image source={require("@/assets/images/logo-lm.png")} style={styles.logoAbout} contentFit="contain" /><ThemedText style={styles.appVersion}>JS Sala de Espera Live v1.0.0</ThemedText><ThemedText style={styles.appDescription}>Sistema de gerenciamento de sala de espera veicular com sincronização em tempo real</ThemedText></View>
         </View>
 
         <View style={styles.actionButtons}>
