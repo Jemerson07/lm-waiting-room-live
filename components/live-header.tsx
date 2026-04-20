@@ -23,13 +23,13 @@ export function LiveHeader({ totalAttendances, completedAttendances }: LiveHeade
         <View style={styles.topRow}>
           <View style={styles.brandRow}>
             <Image
-              source={require("@/assets/images/logo-lm.png")}
-              style={styles.logo}
-              contentFit="contain"
+                source={require("@/assets/images/logo-jemerson-santos.png")}
+                 style={styles.logo}
+                   contentFit="contain"
             />
             <View style={styles.brandText}>
               <ThemedText style={styles.companyName}>
-                {settings?.companyName || "LM Soluções de Mobilidade"}
+                {settings?.companyName || "Jemerson Santos"}
               </ThemedText>
               <ThemedText style={styles.companySubtitle}>Sala de espera • monitoramento ao vivo</ThemedText>
             </View>
