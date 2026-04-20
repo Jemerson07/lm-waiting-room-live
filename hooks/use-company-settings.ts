@@ -13,7 +13,7 @@ export interface CompanySettings {
 }
 
 export const DEFAULT_SETTINGS: CompanySettings = {
-  companyName: "LM Soluções de Mobilidade",
+  companyName: "Jemerson Santos",
   companyEmail: "",
   companyPhone: "",
   companyAddress: "",
