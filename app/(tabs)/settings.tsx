@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   infoBox: { borderRadius: 12, padding: 16, marginTop: 12, borderLeftWidth: 4, borderLeftColor: "#0052A3" },
   infoText: { fontSize: 14, lineHeight: 20, opacity: 0.8 },
   aboutContainer: { alignItems: "center", paddingVertical: 20 },
-  logoAbout: { width: 120, height: 60, marginBottom: 16 },
+  logoAbout: { width: 220, height: 80, marginBottom: 16 },
   appVersion: { fontSize: 16, fontWeight: "600", marginBottom: 8 },
   appDescription: { fontSize: 13, opacity: 0.7, textAlign: "center" },
   actionButtons: { gap: 12, marginBottom: 20 },
