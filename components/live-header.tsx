@@ -2,6 +2,7 @@ import { StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { ThemedText } from "./themed-text";
 import { useCompanySettings } from "@/hooks/use-company-settings";
+import { BRAND_SUBTITLE } from "@/lib/brand";
 
 interface LiveHeaderProps {
   totalAttendances: number;
