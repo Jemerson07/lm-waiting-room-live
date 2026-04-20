@@ -120,10 +120,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   logo: {
-    width: 110,
-    height: 56,
-    marginRight: 12,
-  },
+  width: 180,
+  height: 64,
+  marginRight: 14,
+},
   brandText: {
     flex: 1,
   },
