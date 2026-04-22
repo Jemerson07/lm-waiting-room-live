@@ -153,4 +153,3 @@ Este projeto é um case de desenvolvimento com foco em:
 
 **Jemerson Santos**
 
-Se quiser usar este projeto como vitrine profissional, consulte também `docs/LINKEDIN_CASE.md`.
